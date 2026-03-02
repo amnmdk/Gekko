@@ -1,0 +1,129 @@
+version: "3.9"
+
+# ============================================================
+# ndbot — Docker Compose
+# ARM64 compatible (Raspberry Pi 5 / Apple M-series)
+# ============================================================
+
+services:
+
+  # ----------------------------------------------------------
+  # simulate: one-shot simulation run
+  # ----------------------------------------------------------
+  simulate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ndbot:latest
+    container_name: ndbot-simulate
+    command: ["simulate", "--config", "/app/config/sample.yaml", "--seed", "42"]
+    volumes:
+      - ./data:/app/data
+      - ./results:/app/results
+      - ./config:/app/config:ro
+    environment:
+      - NDBOT__PORTFOLIO__INITIAL_CAPITAL=100
+      # Override any config value: NDBOT__SECTION__KEY=value
+    profiles:
+      - simulate
+
+  # ----------------------------------------------------------
+  # event-study: event study analysis
+  # ----------------------------------------------------------
+  event-study:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ndbot:latest
+    container_name: ndbot-eventstudy
+    command: ["event-study", "--config", "/app/config/sample.yaml", "--output-dir", "/app/results"]
+    volumes:
+      - ./data:/app/data
+      - ./results:/app/results
+      - ./config:/app/config:ro
+    profiles:
+      - research
+
+  # ----------------------------------------------------------
+  # walkforward: walk-forward validation
+  # ----------------------------------------------------------
+  walkforward:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ndbot:latest
+    container_name: ndbot-walkforward
+    command: ["walkforward", "--config", "/app/config/sample.yaml", "--output-dir", "/app/results"]
+    volumes:
+      - ./data:/app/data
+      - ./results:/app/results
+      - ./config:/app/config:ro
+    profiles:
+      - research
+
+  # ----------------------------------------------------------
+  # grid: parameter grid search
+  # ----------------------------------------------------------
+  grid:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ndbot:latest
+    container_name: ndbot-grid
+    command: ["grid", "--config", "/app/config/sample.yaml"]
+    volumes:
+      - ./data:/app/data
+      - ./results:/app/results
+      - ./config:/app/config:ro
+    profiles:
+      - research
+
+  # ----------------------------------------------------------
+  # seed-demo: quick demo with zero config
+  # ----------------------------------------------------------
+  seed-demo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ndbot:latest
+    container_name: ndbot-seeddemo
+    command: ["seed-demo", "--output-dir", "/app/results"]
+    volumes:
+      - ./data:/app/data
+      - ./results:/app/results
+    profiles:
+      - demo
+
+  # ----------------------------------------------------------
+  # paper: paper trading (testnet only)
+  # Configure via environment variables for safety
+  # ----------------------------------------------------------
+  paper:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ndbot:latest
+    container_name: ndbot-paper
+    command: ["paper", "--config", "/app/config/sample.yaml"]
+    volumes:
+      - ./data:/app/data
+      - ./results:/app/results
+      - ./config:/app/config:ro
+    environment:
+      - NDBOT__PAPER__DRY_RUN=true
+      - NDBOT__PAPER__REQUIRE_SANDBOX=true
+      # Set these via .env file — never hardcode secrets
+      # NDBOT__PAPER__API_KEY=your_testnet_key
+      # NDBOT__PAPER__API_SECRET=your_testnet_secret
+    restart: unless-stopped
+    profiles:
+      - paper
+
+# ----------------------------------------------------------
+# Named volumes for persistence across runs
+# ----------------------------------------------------------
+volumes:
+  ndbot-data:
+    driver: local
+  ndbot-results:
+    driver: local

@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \":*)",
+      "Bash(git config user.email \"ndbot@research.local\")",
+      "Bash(git config user.name \"ndbot\")",
+      "Bash(git add -A)"
+    ]
+  }
+}
