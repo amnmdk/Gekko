@@ -1,6 +1,7 @@
 """
 Async RSS/Atom feed reader.
 Uses feedparser for parsing; aiohttp for fetching.
+Implements exponential backoff retry on transient HTTP / network errors.
 """
 from __future__ import annotations
 
@@ -19,6 +20,10 @@ logger = logging.getLogger(__name__)
 
 # Timeout for HTTP requests (seconds)
 _HTTP_TIMEOUT = aiohttp.ClientTimeout(total=15)
+
+# Retry policy: up to 3 attempts with exponential backoff (2s, 4s, 8s)
+_MAX_RETRIES = 3
+_BACKOFF_BASE = 2.0
 
 
 class RSSFeed(BaseFeed):
@@ -52,20 +57,57 @@ class RSSFeed(BaseFeed):
         return events
 
     async def _fetch(self) -> Optional[str]:
-        try:
-            async with aiohttp.ClientSession(timeout=_HTTP_TIMEOUT) as session:
-                async with session.get(
-                    self.url,
-                    headers={"User-Agent": "ndbot/0.1 RSS reader"},
-                ) as resp:
-                    if resp.status != 200:
-                        logger.warning("Feed %s returned HTTP %s", self.name, resp.status)
+        """Fetch feed XML with exponential backoff retry on transient errors."""
+        for attempt in range(1, _MAX_RETRIES + 1):
+            try:
+                async with aiohttp.ClientSession(timeout=_HTTP_TIMEOUT) as session:
+                    async with session.get(
+                        self.url,
+                        headers={"User-Agent": "ndbot/0.1 RSS reader"},
+                    ) as resp:
+                        if resp.status == 200:
+                            return await resp.text()
+                        # 429 Too Many Requests — back off and retry
+                        if resp.status == 429 and attempt < _MAX_RETRIES:
+                            wait = _BACKOFF_BASE ** attempt
+                            logger.warning(
+                                "Feed %s rate-limited (HTTP 429), retry %d/%d in %.0fs",
+                                self.name, attempt, _MAX_RETRIES, wait,
+                            )
+                            await asyncio.sleep(wait)
+                            continue
+                        # Non-retryable HTTP error
+                        logger.warning(
+                            "Feed %s returned HTTP %s (attempt %d/%d)",
+                            self.name, resp.status, attempt, _MAX_RETRIES,
+                        )
                         return None
-                    return await resp.text()
-        except asyncio.TimeoutError:
-            logger.warning("Feed %s timed out", self.name)
-        except Exception as exc:
-            logger.warning("Feed %s fetch error: %s", self.name, exc)
+            except asyncio.TimeoutError:
+                wait = _BACKOFF_BASE ** attempt
+                if attempt < _MAX_RETRIES:
+                    logger.warning(
+                        "Feed %s timed out (attempt %d/%d), retrying in %.0fs",
+                        self.name, attempt, _MAX_RETRIES, wait,
+                    )
+                    await asyncio.sleep(wait)
+                else:
+                    logger.error("Feed %s timed out after %d attempts", self.name, _MAX_RETRIES)
+            except aiohttp.ClientError as exc:
+                wait = _BACKOFF_BASE ** attempt
+                if attempt < _MAX_RETRIES:
+                    logger.warning(
+                        "Feed %s network error: %s (attempt %d/%d), retrying in %.0fs",
+                        self.name, exc, attempt, _MAX_RETRIES, wait,
+                    )
+                    await asyncio.sleep(wait)
+                else:
+                    logger.error(
+                        "Feed %s failed after %d attempts: %s", self.name, _MAX_RETRIES, exc
+                    )
+            except Exception as exc:
+                # Non-retryable unexpected error
+                logger.error("Feed %s unexpected error: %s", self.name, exc)
+                return None
         return None
 
     def _entry_to_event(self, entry: feedparser.FeedParserDict) -> Optional[NewsEvent]:

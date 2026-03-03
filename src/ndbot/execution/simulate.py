@@ -65,12 +65,16 @@ class SimulationEngine:
         n_events: int = 50,
         n_candles: int = 500,
         seed: int = 42,
+        external_candles=None,   # pd.DataFrame | None
+        external_events=None,    # list[dict] | None — pre-classified event dicts
     ):
         self._config = config
         self._db = db
         self._n_events = n_events
         self._n_candles = n_candles
         self._seed = seed
+        self._external_candles = external_candles
+        self._external_events = external_events  # list of event dicts (from DB/JSON)
 
         # Sub-components
         self._market = MarketDataFeed(config)
@@ -103,17 +107,22 @@ class SimulationEngine:
             config_snapshot=self._config.model_dump(),
         )
 
-        # Generate synthetic events
+        # Generate or load events
         events = self._generate_events()
-        logger.info("Generated %d synthetic events", len(events))
+        logger.info("Loaded %d events (%s)", len(events),
+                    "external" if self._external_events else "synthetic")
 
-        # Generate synthetic candles aligned to event timestamps
-        shock_times = [ev.published_at for ev in events]
-        self._market.load_synthetic(
-            n_candles=self._n_candles,
-            seed=self._seed,
-            shock_times=shock_times,
-        )
+        # Load candles — prefer external (backtest) over synthetic (simulate)
+        if self._external_candles is not None and not self._external_candles.empty:
+            self._market.load_dataframe(self._external_candles)
+            logger.info("Using external candles (%d rows)", len(self._external_candles))
+        else:
+            shock_times = [ev.published_at for ev in events]
+            self._market.load_synthetic(
+                n_candles=self._n_candles,
+                seed=self._seed,
+                shock_times=shock_times,
+            )
 
         # Process events one by one (simulate time progression)
         candles = self._market.candles
@@ -188,23 +197,71 @@ class SimulationEngine:
             self._portfolio.equity,
             summary.get("return_pct", 0.0),
         )
+
+        # Auto-save per-run metrics JSON
+        self._save_metrics_json(summary)
         return summary
+
+    def _save_metrics_json(self, summary: dict) -> None:
+        """Save run metrics to results/run_{run_id}_metrics.json."""
+        import json
+        from pathlib import Path
+        results_dir = Path("results")
+        results_dir.mkdir(parents=True, exist_ok=True)
+        out = results_dir / f"run_{self._run_id}_metrics.json"
+        with open(out, "w") as f:
+            json.dump(summary, f, indent=2, default=str)
+        logger.info("Run metrics saved: %s", out)
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
     def _generate_events(self) -> list[NewsEvent]:
+        """Return events from external source (backtest) or generate synthetic ones."""
         from datetime import datetime, timedelta, timezone
 
-        # Start events one candle_window before "now" in the synthetic timeline
-        tf_min = self._market._mc.atr_period  # use period as proxy; actually use timeframe
-        # Build a proper start time
-        n_candles = self._n_candles
-        tf_minutes = self._market._tf_minutes()
-        sim_start = datetime.now(timezone.utc) - timedelta(minutes=tf_minutes * n_candles)
+        # --- Backtest mode: reconstruct NewsEvent from stored dicts ---
+        if self._external_events:
+            events: list[NewsEvent] = []
+            for d in self._external_events:
+                try:
+                    domain = EventDomain(d.get("domain", "UNKNOWN"))
+                except ValueError:
+                    domain = EventDomain.UNKNOWN
+                ts_str = d.get("published_at", "")
+                try:
+                    import pandas as pd
+                    ts = pd.Timestamp(ts_str)
+                    if ts.tzinfo is None:
+                        ts = ts.tz_localize("UTC")
+                    published_at = ts.to_pydatetime()
+                except Exception:
+                    published_at = datetime.now(timezone.utc)
+                ev = NewsEvent(
+                    event_id=d.get("event_id", NewsEvent.make_id(
+                        d.get("source", ""), d.get("url", ""), d.get("headline", "")
+                    )),
+                    domain=domain,
+                    headline=d.get("headline", ""),
+                    summary=d.get("summary", ""),
+                    source=d.get("source", "stored"),
+                    url=d.get("url", ""),
+                    published_at=published_at,
+                    credibility_weight=d.get("credibility_weight", 1.0),
+                    keywords_matched=d.get("keywords_matched", []),
+                    sentiment_score=d.get("sentiment_score", 0.0),
+                    importance_score=d.get("importance_score", 0.5),
+                )
+                events.append(ev)
+            events.sort(key=lambda e: e.published_at)
+            return events
 
-        events: list[NewsEvent] = []
+        # --- Simulate mode: generate synthetic events ---
+        tf_minutes = self._market._tf_minutes()
+        sim_start = datetime.now(timezone.utc) - timedelta(minutes=tf_minutes * self._n_candles)
+
+        events = []
         for domain in [EventDomain.ENERGY_GEO, EventDomain.AI_RELEASES]:
             feed = SyntheticFeed(
                 domain=domain,
@@ -216,7 +273,6 @@ class SimulationEngine:
             batch = feed.generate_batch(self._n_events)
             events.extend(batch)
 
-        # Sort by timestamp
         events.sort(key=lambda e: e.published_at)
         return events
 

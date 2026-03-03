@@ -229,8 +229,21 @@ class PaperEngine:
             max_dd=perf.max_drawdown_pct,
         )
         await self._market.close()
+        summary = self._portfolio.summary()
+        self._save_metrics_json(summary)
         logger.info("Paper engine shutdown complete.")
-        return self._portfolio.summary()
+        return summary
+
+    def _save_metrics_json(self, summary: dict) -> None:
+        """Save run metrics to results/run_{run_id}_metrics.json."""
+        import json
+        from pathlib import Path
+        results_dir = Path("results")
+        results_dir.mkdir(parents=True, exist_ok=True)
+        out = results_dir / f"run_{self._run_id}_metrics.json"
+        with open(out, "w") as f:
+            json.dump(summary, f, indent=2, default=str)
+        logger.info("Run metrics saved: %s", out)
 
     def _safety_check(self) -> None:
         """Hard safety check before any exchange connectivity."""
