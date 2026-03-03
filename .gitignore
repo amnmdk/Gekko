@@ -23,6 +23,10 @@ env/
 *.swp
 *.swo
 
+# Logs
+logs/
+*.log
+
 # Data and results (large files)
 data/*.db
 data/*.csv

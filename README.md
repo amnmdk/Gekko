@@ -117,14 +117,16 @@ paper:
 ## CLI Reference
 
 ```bash
-ndbot simulate     --config config/sample.yaml [--events 40] [--candles 500] [--seed 42]
-ndbot backtest     --config config/sample.yaml [--events-file f.json] [--candles-file f.csv]
-ndbot event-study  --config config/sample.yaml [--output-dir results] [--n-events 30]
-ndbot walkforward  --config config/sample.yaml [--output-dir results] [--n-events 200]
-ndbot grid         --config config/sample.yaml [--n-events 100]
-ndbot paper        --config config/sample.yaml [--duration 3600]
-ndbot status       [--db data/ndbot.db]
-ndbot seed-demo    # No config required — zero-dependency demo
+ndbot simulate        --config config/sample.yaml [--events 40] [--candles 500] [--seed 42]
+ndbot backtest        --config config/sample.yaml [--events-file f.json] [--candles-file f.csv]
+ndbot event-study     --config config/sample.yaml [--output-dir results] [--n-events 30]
+ndbot walkforward     --config config/sample.yaml [--output-dir results] [--n-events 200]
+ndbot grid            --config config/sample.yaml [--n-events 100]
+ndbot paper           --config config/sample.yaml [--duration 3600]
+ndbot status          [--db data/ndbot.db]
+ndbot seed-demo       # No config required — zero-dependency demo
+ndbot export          --run-id <id> [--format csv|json] [--what trades|events|both]
+ndbot validate-config --config config/sample.yaml [--check-feeds]
 ```
 
 ---
@@ -379,9 +381,12 @@ ruff check src/ tests/
 
 ```
 newsdriven-trading-bot/
+├── .github/
+│   └── workflows/
+│       └── ci.yml       ← GitHub Actions: lint + type-check + pytest + Docker ARM64 build
 ├── src/ndbot/
 │   ├── config/          settings.py, loader.py
-│   ├── feeds/           base.py, rss_feed.py, synthetic.py, manager.py
+│   ├── feeds/           base.py, rss_feed.py (retry/backoff), synthetic.py, manager.py
 │   ├── classifier/      keyword_classifier.py, entity_extractor.py
 │   ├── signals/         base.py, confidence_model.py, confirmation.py,
 │   │                    energy_geo.py, ai_releases.py
@@ -389,13 +394,14 @@ newsdriven-trading-bot/
 │   ├── portfolio/       engine.py, position.py, risk.py, metrics.py
 │   ├── research/        event_study.py, walkforward.py
 │   ├── storage/         database.py, models.py
-│   ├── execution/       simulate.py, paper.py
+│   ├── execution/       simulate.py (external candles/events), paper.py
 │   ├── metrics.py
-│   └── cli.py
+│   └── cli.py           ← +export, +validate-config, rotating log
 ├── config/
 │   └── sample.yaml
 ├── data/                (gitignored, created at runtime)
-├── results/             (gitignored, charts and reports saved here)
+├── logs/                (gitignored, ndbot.log written here automatically)
+├── results/             (gitignored, charts, reports, and per-run metrics.json saved here)
 ├── tests/
 │   └── test_basic.py
 ├── Dockerfile
@@ -404,6 +410,73 @@ newsdriven-trading-bot/
 ├── requirements.txt
 └── README.md
 ```
+
+---
+
+## Development Roadmap
+
+Progress is tracked commit-by-commit. Check the git log for details.
+
+### Completed
+
+- [x] **v0.1 — Core framework** *(commit e617424)*
+  - Feeds: async RSS reader + synthetic event generator
+  - Classifier: keyword + entity extraction (no transformers)
+  - Signals: Bayesian confidence model, confirmation engine, ENERGY_GEO + AI_RELEASES generators
+  - Market: GBM+GARCH synthetic candles, ATR/MA regime detector, CCXT live data
+  - Portfolio: fixed-fractional risk engine, full position lifecycle, Sharpe/Sortino/Calmar metrics
+  - Research: event study (t-stats, vol expansion, plots) + rolling walk-forward validation
+  - Storage: SQLite via SQLAlchemy (events, trades, runs, walkforward, grid tables)
+  - Execution: simulation engine (zero-API) + paper trading engine (CCXT testnet, DRY_RUN safe)
+  - CLI: 8 commands (simulate, backtest, event-study, walkforward, grid, paper, status, seed-demo)
+  - Deployment: ARM64 Dockerfile + docker-compose profiles
+
+- [x] **v0.2 — Reliability & Observability** *(current)*
+  - **Bug fix**: backtest command now correctly uses user-provided candles CSV and events JSON
+  - **Bug fix**: `SimulationEngine` accepts `external_candles` / `external_events` — no more silent override
+  - **New**: `ndbot export` — export trades/events from any run to CSV or JSON
+  - **New**: `ndbot validate-config` — health-check table for config values; optional feed URL reachability check
+  - **New**: Rotating log file — all runs automatically write to `logs/ndbot.log` (10 MB × 3 backups)
+  - **New**: Per-run metrics JSON — `results/run_{id}_metrics.json` saved automatically after simulate/paper
+  - **New**: RSS retry/backoff — up to 3 attempts with 2s/4s/8s exponential backoff on 429 and timeouts
+  - **New**: GitHub Actions CI — ruff lint + black format check + mypy + pytest + Docker ARM64 build on every push
+
+### Planned
+
+- [ ] **v0.3 — Research Enhancements**
+  - [ ] Causal inference baseline (difference-in-differences against random event times)
+  - [ ] Multi-symbol support (trade basket based on domain signal)
+  - [ ] Parameter sensitivity tornado chart
+  - [ ] Bootstrap confidence intervals for event study t-statistics
+
+- [ ] **v0.4 — Operational**
+  - [ ] Prometheus metrics endpoint for live monitoring
+  - [ ] Slack / Telegram alert on daily loss / drawdown breach
+  - [ ] Rich TUI live dashboard (positions + equity curve in terminal)
+  - [ ] Automatic data retention cleanup job
+
+- [ ] **v0.5 — Multi-strategy**
+  - [ ] Plugin architecture for custom signal generators
+  - [ ] Multi-exchange routing abstraction
+  - [ ] Strategy registry with hot-reload
+
+---
+
+## Changelog
+
+### v0.2 — 2026-03-03
+- Fix backtest CLI to correctly inject external candles and events into `SimulationEngine`
+- Add `ndbot export` command (CSV/JSON for trades and events)
+- Add `ndbot validate-config` command with optional feed URL check
+- Add rotating file log handler (`logs/ndbot.log`, 10 MB × 3 backups, DEBUG level)
+- Add automatic per-run metrics JSON export to `results/`
+- Add exponential backoff retry (3 attempts, 2s/4s/8s) to RSS feed fetcher
+- Add GitHub Actions CI workflow (lint + type-check + pytest + Docker ARM64 build)
+
+### v0.1 — 2026-03-03
+- Initial production-grade framework: 50 files, 6820 lines
+- Full event-driven pipeline: feeds → classify → signal → confirm → portfolio → storage
+- Simulation, backtest, paper, event study, walk-forward, grid search
 
 ---
 
