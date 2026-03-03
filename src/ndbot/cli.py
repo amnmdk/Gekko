@@ -3,14 +3,16 @@ ndbot CLI — entry point for all commands.
 
 Commands
 --------
-  simulate    Run event-driven simulation with synthetic data
-  backtest    Replay stored events + candles
-  event-study Run event study analysis
-  walkforward Run walk-forward validation
-  grid        Parameter grid search
-  paper       Run paper trading (sandbox/testnet only)
-  status      Show recent runs and system status
-  seed-demo   Generate demo data and run a quick simulation
+  simulate        Run event-driven simulation with synthetic data
+  backtest        Replay stored events + candles
+  event-study     Run event study analysis
+  walkforward     Run walk-forward validation
+  grid            Parameter grid search
+  paper           Run paper trading (sandbox/testnet only)
+  status          Show recent runs and system status
+  seed-demo       Generate demo data and run a quick simulation
+  export          Export events/trades from a run to CSV or JSON
+  validate-config Validate a config file and report health check
 """
 from __future__ import annotations
 
@@ -45,12 +47,37 @@ console = Console()
 # ---------------------------------------------------------------------------
 
 def _setup_logging(level: str = "INFO") -> None:
-    logging.basicConfig(
-        format="%(asctime)s [%(levelname)-5s] %(name)s: %(message)s",
+    from logging.handlers import RotatingFileHandler
+
+    log_level = getattr(logging, level.upper(), logging.INFO)
+    fmt = logging.Formatter(
+        "%(asctime)s [%(levelname)-5s] %(name)s: %(message)s",
         datefmt="%H:%M:%S",
-        level=getattr(logging, level.upper(), logging.INFO),
-        stream=sys.stdout,
     )
+
+    root = logging.getLogger()
+    root.setLevel(log_level)
+    root.handlers.clear()
+
+    # Console handler
+    sh = logging.StreamHandler(sys.stdout)
+    sh.setFormatter(fmt)
+    sh.setLevel(log_level)
+    root.addHandler(sh)
+
+    # Rotating file handler — logs/ndbot.log (10 MB × 3 backups)
+    logs_dir = Path("logs")
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    fh = RotatingFileHandler(
+        logs_dir / "ndbot.log",
+        maxBytes=10 * 1024 * 1024,
+        backupCount=3,
+        encoding="utf-8",
+    )
+    fh.setFormatter(fmt)
+    fh.setLevel(logging.DEBUG)  # Always log DEBUG to file regardless of console level
+    root.addHandler(fh)
+
     # Silence noisy third-party loggers
     for name in ("urllib3", "ccxt", "aiohttp", "feedparser"):
         logging.getLogger(name).setLevel(logging.WARNING)
@@ -184,9 +211,12 @@ def backtest(
         title="ndbot", border_style="blue"
     ))
 
-    engine = SimulationEngine(cfg, db, n_events=40, n_candles=500, seed=seed)
-    if events_list:
-        engine._market.load_dataframe(candles_df)
+    engine = SimulationEngine(
+        cfg, db,
+        n_events=40, n_candles=500, seed=seed,
+        external_candles=candles_df,
+        external_events=events_list if events_list else None,
+    )
     summary = engine.run()
 
     print_performance_table(summary, title=f"Backtest Results — {cfg.run_name}")
@@ -655,6 +685,179 @@ def seed_demo(output_dir: str, seed: int):
     console.print(f"  Simulation DB:  {cfg.storage.db_path}")
     console.print(f"  Event study:    {output_dir}/event_study_seed-demo_*.png")
     console.print(f"\n[dim]Run 'ndbot status' to see all runs.[/dim]")
+
+
+# ---------------------------------------------------------------------------
+# export
+# ---------------------------------------------------------------------------
+
+@main.command()
+@click.option("--run-id", required=True, help="Run ID to export (from ndbot status)")
+@click.option("--format", "fmt", type=click.Choice(["csv", "json"]), default="csv",
+              show_default=True)
+@click.option("--output-dir", default="results", show_default=True)
+@click.option("--db", default="data/ndbot.db", show_default=True)
+@click.option("--what", type=click.Choice(["trades", "events", "both"]), default="both",
+              show_default=True, help="What to export")
+def export(run_id: str, fmt: str, output_dir: str, db: str, what: str):
+    """Export events and/or trades for a run to CSV or JSON."""
+    import pandas as pd
+    from .storage.database import Database
+
+    if not Path(db).exists():
+        console.print(f"[red]Database not found: {db}[/red]")
+        sys.exit(1)
+
+    database = Database(db)
+    database.init()
+    out_dir = Path(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    exported: list[str] = []
+
+    if what in ("trades", "both"):
+        trades = database.get_trades(run_id=run_id, limit=10000)
+        if not trades:
+            console.print(f"[yellow]No trades found for run_id={run_id}[/yellow]")
+        else:
+            if fmt == "csv":
+                path = out_dir / f"trades_{run_id}.csv"
+                pd.DataFrame(trades).to_csv(path, index=False)
+            else:
+                path = out_dir / f"trades_{run_id}.json"
+                with open(path, "w") as f:
+                    json.dump(trades, f, indent=2, default=str)
+            console.print(f"[green]Exported {len(trades)} trades → {path}[/green]")
+            exported.append(str(path))
+
+    if what in ("events", "both"):
+        events = database.get_events(run_id=run_id, limit=10000)
+        if not events:
+            console.print(f"[yellow]No events found for run_id={run_id}[/yellow]")
+        else:
+            if fmt == "csv":
+                path = out_dir / f"events_{run_id}.csv"
+                pd.DataFrame(events).to_csv(path, index=False)
+            else:
+                path = out_dir / f"events_{run_id}.json"
+                with open(path, "w") as f:
+                    json.dump(events, f, indent=2, default=str)
+            console.print(f"[green]Exported {len(events)} events → {path}[/green]")
+            exported.append(str(path))
+
+    if exported:
+        console.print(f"\n[dim]Files written to: {output_dir}/[/dim]")
+    else:
+        console.print("[yellow]Nothing exported.[/yellow]")
+
+
+# ---------------------------------------------------------------------------
+# validate-config
+# ---------------------------------------------------------------------------
+
+@main.command("validate-config")
+@click.option("--config", "-c", required=True, type=click.Path(exists=True))
+@click.option("--check-feeds", is_flag=True, default=False,
+              help="Attempt HTTP HEAD request to each enabled feed URL")
+def validate_config(config: str, check_feeds: bool):
+    """Validate a config file and print a health-check report."""
+    import asyncio as _asyncio
+
+    _setup_logging("WARNING")  # Keep output clean during validation
+    cfg = _load_config_or_exit(config)
+
+    from rich.table import Table, box as rbox
+
+    table = Table(
+        title=f"Config Health Check — {config}",
+        box=rbox.ROUNDED,
+        show_header=True,
+        header_style="bold cyan",
+    )
+    table.add_column("Section", width=22)
+    table.add_column("Parameter", width=28)
+    table.add_column("Value", width=28)
+    table.add_column("Status", width=10)
+
+    issues: list[str] = []
+
+    def row(section: str, param: str, val, ok: bool, warn: str = ""):
+        status = "[green]OK[/green]" if ok else "[red]WARN[/red]"
+        table.add_row(section, param, str(val), status)
+        if not ok and warn:
+            issues.append(warn)
+
+    # Portfolio
+    row("portfolio", "initial_capital", cfg.portfolio.initial_capital,
+        cfg.portfolio.initial_capital > 0, "initial_capital must be > 0")
+    row("portfolio", "max_daily_loss_pct", cfg.portfolio.max_daily_loss_pct,
+        0 < cfg.portfolio.max_daily_loss_pct <= 0.2,
+        "max_daily_loss_pct > 20% is very aggressive")
+    row("portfolio", "max_drawdown_pct", cfg.portfolio.max_drawdown_pct,
+        cfg.portfolio.max_drawdown_pct <= 0.3,
+        "max_drawdown_pct > 30% is extremely aggressive")
+    row("portfolio", "commission_rate", cfg.portfolio.commission_rate,
+        cfg.portfolio.commission_rate < 0.01,
+        "commission_rate >= 1% seems very high")
+
+    # Signals
+    for sc in cfg.signals:
+        row(f"signals/{sc.domain}", "min_confidence", sc.min_confidence,
+            sc.min_confidence >= 0.3,
+            f"Signal {sc.domain}: min_confidence < 0.3 will generate many low-quality signals")
+        row(f"signals/{sc.domain}", "risk_per_trade", sc.risk_per_trade,
+            sc.risk_per_trade <= 0.05,
+            f"Signal {sc.domain}: risk_per_trade > 5% is aggressive")
+        row(f"signals/{sc.domain}", "rr_ratio", sc.rr_ratio,
+            sc.rr_ratio >= 1.0,
+            f"Signal {sc.domain}: rr_ratio < 1.0 means average loss > average win")
+
+    # Paper mode safety
+    if cfg.mode == "paper":
+        row("paper", "dry_run", cfg.paper.dry_run, cfg.paper.dry_run,
+            "DANGER: dry_run=False in paper mode will submit real testnet orders")
+        row("paper", "require_sandbox", cfg.paper.require_sandbox,
+            cfg.paper.require_sandbox,
+            "DANGER: require_sandbox=False may connect to live exchange")
+
+    # Feeds
+    enabled_feeds = [f for f in cfg.feeds if f.enabled]
+    row("feeds", "enabled_feed_count", len(enabled_feeds),
+        len(enabled_feeds) > 0 or cfg.mode == "simulate",
+        "No feeds enabled. Simulate mode will use synthetic data; live modes need feeds.")
+
+    console.print(table)
+
+    # Optional feed URL reachability check
+    if check_feeds and enabled_feeds:
+        console.print("\n[cyan]Checking feed URLs...[/cyan]")
+        import aiohttp
+
+        async def _check_url(feed_cfg) -> tuple[str, bool, str]:
+            try:
+                async with aiohttp.ClientSession() as s:
+                    async with s.head(feed_cfg.url, timeout=aiohttp.ClientTimeout(total=5)) as r:
+                        return feed_cfg.name, r.status < 400, f"HTTP {r.status}"
+            except Exception as exc:
+                return feed_cfg.name, False, str(exc)[:50]
+
+        results = _asyncio.run(
+            _asyncio.gather(*[_check_url(f) for f in enabled_feeds])
+        )
+        for name, ok, detail in results:
+            status = "[green]reachable[/green]" if ok else "[red]unreachable[/red]"
+            console.print(f"  {name:<30} {status} ({detail})")
+
+    # Summary
+    if issues:
+        console.print(f"\n[bold yellow]Warnings ({len(issues)}):[/bold yellow]")
+        for i, w in enumerate(issues, 1):
+            console.print(f"  {i}. {w}")
+    else:
+        console.print("\n[bold green]Config looks healthy.[/bold green]")
+
+    console.print(f"\n[dim]Mode: {cfg.mode} | Symbol: {cfg.market.symbol} | "
+                  f"Capital: ${cfg.portfolio.initial_capital}[/dim]")
 
 
 # ---------------------------------------------------------------------------
