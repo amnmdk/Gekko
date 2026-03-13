@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NDBOT — News-Driven Trading Dashboard</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+<!-- ── MAP ──────────────────────────────────────────────── -->
+<div id="map"></div>
+
+<!-- ── TOP BAR ──────────────────────────────────────────── -->
+<div id="topbar">
+  <div class="logo">NDBOT <span>v0.2 · News-Driven Trading</span></div>
+
+  <div id="status-dot" class="status-dot offline"></div>
+  <span id="status-label" style="font-size:10px;letter-spacing:1px;color:var(--text-muted)">CONNECTING</span>
+
+  <div class="topbar-stat">
+    <span class="label">Balance</span>
+    <span class="value" id="tb-balance">— €</span>
+  </div>
+  <div class="topbar-stat">
+    <span class="label">P&amp;L</span>
+    <span class="value" id="tb-pnl">—</span>
+  </div>
+  <div class="topbar-stat">
+    <span class="label">Return</span>
+    <span class="value" id="tb-pnlpct">—</span>
+  </div>
+  <div class="topbar-stat">
+    <span class="label">Trades</span>
+    <span class="value" id="tb-trades">0</span>
+  </div>
+  <div class="topbar-stat">
+    <span class="label">Win Rate</span>
+    <span class="value" id="tb-winrate">—</span>
+  </div>
+  <div class="topbar-stat">
+    <span class="label">Drawdown</span>
+    <span class="value" id="tb-drawdown">—</span>
+  </div>
+  <div class="topbar-stat">
+    <span class="label">Open</span>
+    <span class="value" id="tb-open">0</span>
+  </div>
+
+  <button id="reset-btn">↺ Reset</button>
+  <div id="clock"></div>
+</div>
+
+<!-- ── LEFT PANEL ───────────────────────────────────────── -->
+<div id="left-panel">
+
+  <!-- Layer control -->
+  <div class="panel-card">
+    <h4>Map Layers</h4>
+
+    <label class="layer-toggle">
+      <input type="checkbox" id="toggle-energy" checked />
+      <div class="toggle-dot"></div>
+      <span class="layer-name">Geo / Energy Events</span>
+      <div class="layer-icon" style="background:var(--energy-color);box-shadow:0 0 6px var(--energy-color)"></div>
+    </label>
+
+    <label class="layer-toggle">
+      <input type="checkbox" id="toggle-ai" checked />
+      <div class="toggle-dot"></div>
+      <span class="layer-name">AI Releases</span>
+      <div class="layer-icon" style="background:var(--ai-color);box-shadow:0 0 6px var(--ai-color)"></div>
+    </label>
+
+    <label class="layer-toggle">
+      <input type="checkbox" id="toggle-positions" checked />
+      <div class="toggle-dot"></div>
+      <span class="layer-name">Open Positions</span>
+      <div class="layer-icon" style="background:#ffdd00;box-shadow:0 0 6px #ffdd00"></div>
+    </label>
+
+    <label class="layer-toggle">
+      <input type="checkbox" id="toggle-trades" checked />
+      <div class="toggle-dot"></div>
+      <span class="layer-name">Trade History</span>
+      <div class="layer-icon" style="background:var(--long-color);box-shadow:0 0 6px var(--long-color)"></div>
+    </label>
+  </div>
+
+  <!-- Portfolio stats -->
+  <div class="panel-card">
+    <h4>Portfolio</h4>
+    <div class="stat-row">
+      <span class="s-label">Balance</span>
+      <span class="s-value" id="lp-balance">—</span>
+    </div>
+    <div class="stat-row">
+      <span class="s-label">Total P&amp;L</span>
+      <span class="s-value" id="lp-pnl">—</span>
+    </div>
+    <div class="stat-row">
+      <span class="s-label">Max Drawdown</span>
+      <span class="s-value" id="lp-dd">—</span>
+    </div>
+    <div class="stat-row">
+      <span class="s-label">Win Rate</span>
+      <span class="s-value" id="lp-wr">—</span>
+    </div>
+    <div class="stat-row">
+      <span class="s-label">Total Trades</span>
+      <span class="s-value" id="lp-trades">0</span>
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div class="panel-card">
+    <h4>Legend</h4>
+    <div style="display:flex;flex-direction:column;gap:5px;font-size:11px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="width:10px;height:10px;border-radius:50%;background:var(--energy-color);box-shadow:0 0 6px var(--energy-color);flex-shrink:0"></div>
+        Geo / Energy Event
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="width:10px;height:10px;border-radius:50%;background:var(--ai-color);box-shadow:0 0 6px var(--ai-color);flex-shrink:0"></div>
+        AI Release Event
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="width:10px;height:10px;border-radius:50%;background:#ffdd00;box-shadow:0 0 6px #ffdd00;flex-shrink:0"></div>
+        Open Position
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;color:var(--long-color);font-weight:600">▲ LONG trade</div>
+      <div style="display:flex;align-items:center;gap:8px;color:var(--short-color);font-weight:600">▼ SHORT trade</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── RIGHT PANEL — EVENTS ──────────────────────────────── -->
+<div id="right-panel">
+  <h4>Live Events Feed</h4>
+  <div id="events-list">
+    <div style="padding:14px;color:var(--text-muted);font-size:12px">Connecting to feed…</div>
+  </div>
+</div>
+
+<!-- ── NEWS TICKER ───────────────────────────────────────── -->
+<div id="ticker-bar">
+  <div class="ticker-label">BREAKING</div>
+  <div id="ticker-inner">
+    <span style="color:var(--text-muted)">Waiting for events…</span>
+  </div>
+</div>
+
+<!-- ── BOTTOM PANEL — TRADES ─────────────────────────────── -->
+<div id="bottom-panel">
+  <div class="panel-header">
+    <h4>Trades</h4>
+    <span id="open-count-badge">0 OPEN</span>
+  </div>
+  <div id="trades-container">
+    <table id="trades-table">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Symbol</th>
+          <th>Dir</th>
+          <th>Entry</th>
+          <th>Exit</th>
+          <th>Size</th>
+          <th>P&amp;L</th>
+          <th>Status</th>
+          <th>Event</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── TOAST CONTAINER ───────────────────────────────────── -->
+<div id="toast-container"></div>
+
+<!-- ── SCRIPTS ───────────────────────────────────────────── -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="/js/main.js"></script>
+</body>
+</html>

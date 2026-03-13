@@ -25,5 +25,10 @@ aiosqlite>=0.19
 rich>=13.7
 tabulate>=0.9
 
+# Web API
+fastapi>=0.111
+uvicorn[standard]>=0.30
+websockets>=12.0
+
 # Utilities
 python-dateutil>=2.8

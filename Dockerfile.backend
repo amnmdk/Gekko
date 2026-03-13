@@ -1,0 +1,42 @@
+# ============================================================
+# ndbot — Backend Dockerfile (FastAPI + uvicorn)
+# ARM64 compatible for Raspberry Pi 5
+# ============================================================
+FROM python:3.11-slim
+
+LABEL maintainer="ndbot"
+LABEL description="ndbot FastAPI backend"
+
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc g++ libffi-dev libssl-dev curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -r ndbot && useradd -r -g ndbot ndbot
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir uvicorn[standard] fastapi
+
+COPY src/ ./src/
+COPY config/ ./config/
+COPY pyproject.toml .
+
+RUN pip install --no-cache-dir -e .
+
+RUN mkdir -p /app/data /app/results /app/logs && \
+    chown -R ndbot:ndbot /app
+
+USER ndbot
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8000/api/status || exit 1
+
+EXPOSE 8000
+
+CMD ["uvicorn", "src.ndbot.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
