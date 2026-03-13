@@ -33,7 +33,7 @@ from ..feeds.base import NewsEvent
 from ..feeds.manager import FeedManager
 from ..market.data import MarketDataFeed
 from ..portfolio.engine import PortfolioEngine
-from ..portfolio.position import Position, PositionStatus
+from ..portfolio.position import Position
 from ..signals.ai_releases import AIReleasesSignalGenerator
 from ..signals.confidence_model import ConfidenceModel
 from ..signals.energy_geo import EnergyGeoSignalGenerator

@@ -8,7 +8,6 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
-from email.utils import parsedate_to_datetime
 from typing import Optional
 
 import aiohttp

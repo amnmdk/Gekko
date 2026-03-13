@@ -20,11 +20,9 @@ Flow
 """
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 from ..classifier.entity_extractor import EntityExtractor
 from ..classifier.keyword_classifier import KeywordClassifier
@@ -33,7 +31,6 @@ from ..feeds.base import EventDomain, NewsEvent
 from ..feeds.synthetic import SyntheticFeed
 from ..market.data import MarketDataFeed
 from ..portfolio.engine import PortfolioEngine
-from ..portfolio.position import PositionStatus
 from ..signals.ai_releases import AIReleasesSignalGenerator
 from ..signals.confidence_model import ConfidenceModel
 from ..signals.energy_geo import EnergyGeoSignalGenerator
@@ -125,8 +122,6 @@ class SimulationEngine:
             )
 
         # Process events one by one (simulate time progression)
-        candles = self._market.candles
-        candle_times = list(candles.index)
 
         for ev in events:
             # Save event to DB
@@ -152,7 +147,7 @@ class SimulationEngine:
                 continue
 
             # Portfolio: open position
-            position = self._portfolio.on_signal(signal)
+            self._portfolio.on_signal(signal)
 
             # Advance time to simulate exit conditions
             self._advance_and_update(ev.published_at)
