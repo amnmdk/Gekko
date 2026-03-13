@@ -25,15 +25,14 @@ from pathlib import Path
 from typing import Optional
 
 import click
+from rich import print as rprint
 from rich.console import Console
 from rich.panel import Panel
-from rich import print as rprint
 
 from . import __version__
 from .config.loader import load_config
 from .config.settings import BotConfig
 from .metrics import (
-    print_event_table,
     print_performance_table,
     print_trade_table,
     print_walkforward_table,
@@ -114,7 +113,6 @@ def simulate(config: str, events: int, candles: int, seed: int, log_level: str):
     cfg = _load_config_or_exit(config)
     cfg = cfg.model_copy(update={"mode": "simulate"})
 
-    from .storage.database import Database
     from .execution.simulate import SimulationEngine
 
     db = Database(cfg.storage.db_path)
@@ -167,10 +165,9 @@ def backtest(
     cfg = _load_config_or_exit(config)
     cfg = cfg.model_copy(update={"mode": "backtest"})
 
-    from .storage.database import Database
     from .execution.simulate import SimulationEngine
-    from .market.synthetic_candles import SyntheticCandleGenerator
     from .market.regime import RegimeDetector
+    from .market.synthetic_candles import SyntheticCandleGenerator
 
     db = Database(cfg.storage.db_path)
     db.init()
@@ -241,13 +238,12 @@ def event_study(config: str, output_dir: str, n_events: int, seed: int, log_leve
     _setup_logging(log_level)
     cfg = _load_config_or_exit(config)
 
-    from .storage.database import Database
-    from .market.synthetic_candles import SyntheticCandleGenerator
-    from .market.regime import RegimeDetector
-    from .feeds.synthetic import SyntheticFeed
-    from .feeds.base import EventDomain
-    from .research.event_study import EventStudy
     from .classifier.keyword_classifier import KeywordClassifier
+    from .feeds.base import EventDomain
+    from .feeds.synthetic import SyntheticFeed
+    from .market.regime import RegimeDetector
+    from .market.synthetic_candles import SyntheticCandleGenerator
+    from .research.event_study import EventStudy
 
     db = Database(cfg.storage.db_path)
     db.init()
@@ -322,14 +318,12 @@ def walkforward(config: str, output_dir: str, n_events: int, seed: int, log_leve
     _setup_logging(log_level)
     cfg = _load_config_or_exit(config)
 
-    from .storage.database import Database
-    from .market.synthetic_candles import SyntheticCandleGenerator
-    from .market.regime import RegimeDetector
-    from .feeds.synthetic import SyntheticFeed
-    from .feeds.base import EventDomain
-    from .research.walkforward import WalkForwardValidator
     from .classifier.keyword_classifier import KeywordClassifier
-    from datetime import datetime, timedelta, timezone
+    from .feeds.base import EventDomain
+    from .feeds.synthetic import SyntheticFeed
+    from .market.regime import RegimeDetector
+    from .market.synthetic_candles import SyntheticCandleGenerator
+    from .research.walkforward import WalkForwardValidator
 
     db = Database(cfg.storage.db_path)
     db.init()
@@ -364,7 +358,8 @@ def walkforward(config: str, output_dir: str, n_events: int, seed: int, log_leve
 
     console.print(Panel(
         f"[bold cyan]ndbot WALK-FORWARD[/bold cyan]\n"
-        f"Train: {cfg.research.train_days}d | Test: {cfg.research.test_days}d | Step: {cfg.research.step_days}d\n"
+        f"Train: {cfg.research.train_days}d | Test: {cfg.research.test_days}d"
+        f" | Step: {cfg.research.step_days}d\n"
         f"Events: {len(events_list)} | Candles: {len(candles)}",
         title="ndbot", border_style="blue"
     ))
@@ -391,7 +386,7 @@ def walkforward(config: str, output_dir: str, n_events: int, seed: int, log_leve
 
     agg = report.get("aggregate_oos", {})
     if agg:
-        console.print(f"\n[bold]Aggregate OOS Metrics[/bold]")
+        console.print("\n[bold]Aggregate OOS Metrics[/bold]")
         for k, v in agg.items():
             console.print(f"  {k:<30} {v}")
 
@@ -413,12 +408,11 @@ def grid(config: str, output_dir: str, n_events: int, seed: int, log_level: str)
     _setup_logging(log_level)
     cfg = _load_config_or_exit(config)
 
-    from .storage.database import Database
-    from .market.synthetic_candles import SyntheticCandleGenerator
-    from .market.regime import RegimeDetector
-    from .feeds.synthetic import SyntheticFeed
-    from .feeds.base import EventDomain
     from .classifier.keyword_classifier import KeywordClassifier
+    from .feeds.base import EventDomain
+    from .feeds.synthetic import SyntheticFeed
+    from .market.regime import RegimeDetector
+    from .market.synthetic_candles import SyntheticCandleGenerator
     from .research.walkforward import _PARAM_GRID, WalkForwardValidator
 
     db = Database(cfg.storage.db_path)
@@ -486,7 +480,9 @@ def grid(config: str, output_dir: str, n_events: int, seed: int, log_level: str)
             )
 
     console.print(table)
-    console.print(f"\n[bold green]Best params: {best_params} | Sharpe={best_sharpe:.4f}[/bold green]")
+    console.print(
+        f"\n[bold green]Best params: {best_params} | Sharpe={best_sharpe:.4f}[/bold green]"
+    )
     console.print(f"[dim]Grid results saved to DB: {cfg.storage.db_path}[/dim]")
 
 
@@ -511,7 +507,6 @@ def paper(config: str, duration: Optional[int], log_level: str):
     cfg = _load_config_or_exit(config)
     cfg = cfg.model_copy(update={"mode": "paper"})
 
-    from .storage.database import Database
     from .execution.paper import PaperEngine
 
     db = Database(cfg.storage.db_path)
@@ -538,7 +533,6 @@ def paper(config: str, duration: Optional[int], log_level: str):
 @click.option("--limit", default=10, show_default=True)
 def status(db: str, limit: int):
     """Show recent runs and system status."""
-    from .storage.database import Database
 
     if not Path(db).exists():
         console.print(f"[yellow]Database not found: {db}[/yellow]")
@@ -605,8 +599,9 @@ def seed_demo(output_dir: str, seed: int):
         title="ndbot", border_style="bright_blue"
     ))
 
-    import tempfile, yaml
-    from .config.settings import BotConfig, SignalConfig, FeedConfig
+    import tempfile
+
+    import yaml
 
     # Build minimal config in memory
     cfg_dict = {
@@ -636,13 +631,12 @@ def seed_demo(output_dir: str, seed: int):
         os.unlink(tmp_path)
 
     import hashlib
-    from datetime import datetime, timezone
     run_id_seed = hashlib.sha256(f"seed-demo{seed}".encode()).hexdigest()[:8]
     db_path = f"data/demo_{run_id_seed}.db"
     cfg = cfg.model_copy(update={"storage": cfg.storage.model_copy(update={"db_path": db_path})})
 
-    from .storage.database import Database
     from .execution.simulate import SimulationEngine
+    from .storage.database import Database
 
     db = Database(cfg.storage.db_path)
     db.init()
@@ -652,11 +646,11 @@ def seed_demo(output_dir: str, seed: int):
     print_performance_table(summary, title="Demo Simulation Results")
 
     # Event study
-    from .feeds.synthetic import SyntheticFeed
-    from .feeds.base import EventDomain
-    from .market.synthetic_candles import SyntheticCandleGenerator
-    from .market.regime import RegimeDetector
     from .classifier.keyword_classifier import KeywordClassifier
+    from .feeds.base import EventDomain
+    from .feeds.synthetic import SyntheticFeed
+    from .market.regime import RegimeDetector
+    from .market.synthetic_candles import SyntheticCandleGenerator
     from .research.event_study import EventStudy
 
     classifier = KeywordClassifier()
@@ -675,16 +669,16 @@ def seed_demo(output_dir: str, seed: int):
     study = EventStudy(candles=candles, pre_candles=12, post_candles=48)
 
     Path(output_dir).mkdir(parents=True, exist_ok=True)
-    report = study.run(
+    study.run(
         events=[ev.to_dict() for ev in all_events],
         output_dir=output_dir,
         run_name="seed-demo",
     )
 
-    console.print(f"\n[bold green]Demo complete![/bold green]")
+    console.print("\n[bold green]Demo complete![/bold green]")
     console.print(f"  Simulation DB:  {cfg.storage.db_path}")
     console.print(f"  Event study:    {output_dir}/event_study_seed-demo_*.png")
-    console.print(f"\n[dim]Run 'ndbot status' to see all runs.[/dim]")
+    console.print("\n[dim]Run 'ndbot status' to see all runs.[/dim]")
 
 
 # ---------------------------------------------------------------------------
@@ -702,7 +696,6 @@ def seed_demo(output_dir: str, seed: int):
 def export(run_id: str, fmt: str, output_dir: str, db: str, what: str):
     """Export events and/or trades for a run to CSV or JSON."""
     import pandas as pd
-    from .storage.database import Database
 
     if not Path(db).exists():
         console.print(f"[red]Database not found: {db}[/red]")
@@ -766,7 +759,8 @@ def validate_config(config: str, check_feeds: bool):
     _setup_logging("WARNING")  # Keep output clean during validation
     cfg = _load_config_or_exit(config)
 
-    from rich.table import Table, box as rbox
+    from rich.table import Table
+    from rich.table import box as rbox
 
     table = Table(
         title=f"Config Health Check — {config}",
