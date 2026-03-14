@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import logging.handlers
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,7 +23,51 @@ from .routes import init_routes, router
 from .state import AppState
 from .ws import init_ws, ws_router
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+
+def _setup_logging(log_level: str = "INFO") -> None:
+    """
+    Configure root logger with:
+      - Console handler (coloured via uvicorn, plain otherwise)
+      - Rotating file handler → logs/ndbot.log (5 MB × 3 backups)
+
+    Safe to call multiple times; handlers are only added once.
+    """
+    level = getattr(logging, log_level.upper(), logging.INFO)
+    fmt = "%(asctime)s %(levelname)-8s %(name)s: %(message)s"
+    root = logging.getLogger()
+
+    if root.handlers:
+        # Already configured (e.g. pytest captures logging)
+        root.setLevel(level)
+        return
+
+    root.setLevel(level)
+
+    # Console
+    console = logging.StreamHandler()
+    console.setLevel(level)
+    console.setFormatter(logging.Formatter(fmt))
+    root.addHandler(console)
+
+    # Rotating file — goes to logs/ndbot.log (volume-mounted in Docker)
+    try:
+        log_dir = Path("logs")
+        log_dir.mkdir(parents=True, exist_ok=True)
+        file_handler = logging.handlers.RotatingFileHandler(
+            log_dir / "ndbot.log",
+            maxBytes=5 * 1024 * 1024,  # 5 MB
+            backupCount=3,
+            encoding="utf-8",
+        )
+        file_handler.setLevel(level)
+        file_handler.setFormatter(logging.Formatter(fmt))
+        root.addHandler(file_handler)
+    except OSError:
+        # Read-only filesystem (e.g. some CI environments) — skip file handler
+        pass
+
+
+_setup_logging()
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------

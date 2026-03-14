@@ -7,8 +7,11 @@ on:
     branches: ["master", "main"]
 
 jobs:
+  # ──────────────────────────────────────────────────────────────────────────
+  # Job 1 — Lint, Type-check, Test, Simulate demo
+  # ──────────────────────────────────────────────────────────────────────────
   test:
-    name: Lint, Type-check & Test
+    name: Lint · Type-check · Test · Simulate
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -24,25 +27,21 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
 
-      - name: Install dependencies
+      - name: Install runtime + dev dependencies
         run: |
           python -m pip install --upgrade pip
+          pip install -r requirements.txt
           pip install -e ".[dev]"
 
+      # ── Linting ──────────────────────────────────────────────────────────
       - name: Ruff lint
         run: ruff check src/ tests/
 
       - name: Black format check
         run: black --check src/ tests/
 
-      - name: Mypy type check
-        run: mypy src/ndbot/ --ignore-missing-imports --no-strict-optional
-        continue-on-error: true   # Non-blocking until type annotations are complete
-
-      - name: Run tests
-        run: pytest tests/ -v --tb=short
-
-      - name: Syntax check all Python files
+      # ── Syntax check (fast pre-mypy gate) ────────────────────────────────
+      - name: Python syntax check
         run: |
           python -c "
           import ast, os, sys
@@ -52,19 +51,59 @@ jobs:
                   if f.endswith('.py'):
                       path = os.path.join(root, f)
                       with open(path) as fh:
-                          src = fh.read()
+                          src_text = fh.read()
                       try:
-                          ast.parse(src)
+                          ast.parse(src_text)
                       except SyntaxError as e:
                           errors.append(f'{path}: {e}')
           if errors:
               for e in errors: print('SYNTAX ERROR:', e)
               sys.exit(1)
-          print(f'All Python files pass syntax check.')
+          count = sum(1 for r,d,fs in os.walk('src') for f in fs if f.endswith('.py'))
+          print(f'Syntax OK — checked {count} files')
           "
 
+      # ── Type checking ─────────────────────────────────────────────────────
+      - name: Mypy type check
+        run: mypy src/ndbot/ --ignore-missing-imports --no-strict-optional
+        continue-on-error: true  # Non-blocking until full annotation coverage
+
+      # ── Tests with coverage ───────────────────────────────────────────────
+      - name: Run pytest with coverage
+        run: |
+          pytest tests/ -v --tb=short \
+            --cov=src/ndbot \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage.xml
+
+      # ── Smoke-test CLI (no internet, no exchange) ─────────────────────────
+      - name: CLI smoke — seed-demo
+        run: ndbot seed-demo --output-dir /tmp/demo-output
+
+      - name: CLI smoke — simulate
+        run: ndbot simulate --config config/sample.yaml --seed 42
+
+      - name: Verify results output
+        run: |
+          python -c "
+          from pathlib import Path
+          results = list(Path('results').glob('**/*.json'))
+          assert len(results) > 0, 'No result JSON files found after simulation'
+          print(f'Results OK — {len(results)} JSON file(s) found')
+          "
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Job 2 — Docker build (ARM64 for Raspberry Pi 5)
+  # ──────────────────────────────────────────────────────────────────────────
   docker-build:
-    name: Docker Build (ARM64 simulation)
+    name: Docker Build (ARM64)
     runs-on: ubuntu-latest
     needs: test
 
@@ -72,18 +111,33 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up QEMU (for ARM64 emulation)
+      - name: Set up QEMU (ARM64 emulation)
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image (linux/arm64)
+      - name: Validate docker-compose config
+        run: docker compose config --quiet
+
+      - name: Build backend image (linux/arm64)
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: Dockerfile.backend
           platforms: linux/arm64
           push: false
-          tags: ndbot:ci-${{ github.sha }}
+          tags: ndbot-backend:ci-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build frontend image (linux/arm64)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.frontend
+          platforms: linux/arm64
+          push: false
+          tags: ndbot-frontend:ci-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

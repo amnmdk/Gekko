@@ -365,15 +365,40 @@ pip install -e ".[dev]"
 # Run tests
 pytest tests/ -v
 
+# Run tests with coverage
+pytest tests/ -v --cov=src/ndbot --cov-report=term-missing
+
 # Type check
 mypy src/ndbot/
 
 # Format
 black src/ tests/
 
-# Lint
-ruff check src/ tests/
+# Lint (auto-fix import ordering)
+ruff check src/ tests/ --fix
 ```
+
+---
+
+## Test Suite
+
+The test suite covers **87 tests** across 4 modules, verifiable with `pytest tests/ -v`.
+
+| Module | Tests | Coverage |
+|---|---|---|
+| `test_basic.py` | 21 | Core config, simulation pipeline, feeds, backtest, walk-forward smoke |
+| `test_api.py` | 26 | All REST endpoints + WebSocket snapshot via FastAPI TestClient |
+| `test_validation.py` | 22 | OHLCV integrity, PnL correctness, deduplication, determinism, config rejection |
+| `test_signals.py` | 18 | Signal generators, confidence model bounds, keyword classifier, NER extractor |
+
+**Key invariants verified by the test suite**:
+- `ConfidenceModel.score()` always returns a value in `[0.0, 1.0]` for any input combination
+- `SimulationEngine` with the same `seed` produces byte-identical `total_trades` and final equity
+- OHLCV candles are always valid: `high ≥ max(open, close)`, `low ≤ min(open, close)`, `close > 0`
+- Database deduplication: inserting the same event 5 times stores exactly 1 row
+- Below-threshold confidence always returns `None` from signal generators (no ghost signals)
+- Config validation rejects: `initial_capital < 10`, `risk_per_trade > 0.5`, `min_confidence > 1.0`
+- REST API: all endpoints return 2xx; `PATCH /api/config` clamps values to valid ranges
 
 ---
 
@@ -383,28 +408,33 @@ ruff check src/ tests/
 newsdriven-trading-bot/
 ├── .github/
 │   └── workflows/
-│       └── ci.yml       ← GitHub Actions: lint + type-check + pytest + Docker ARM64 build
+│       └── ci.yml         ← lint + mypy + pytest (87 tests) + CLI smoke + Docker ARM64 build
 ├── src/ndbot/
-│   ├── config/          settings.py, loader.py
-│   ├── feeds/           base.py, rss_feed.py (retry/backoff), synthetic.py, manager.py
-│   ├── classifier/      keyword_classifier.py, entity_extractor.py
-│   ├── signals/         base.py, confidence_model.py, confirmation.py,
-│   │                    energy_geo.py, ai_releases.py
-│   ├── market/          data.py, regime.py, synthetic_candles.py
-│   ├── portfolio/       engine.py, position.py, risk.py, metrics.py
-│   ├── research/        event_study.py, walkforward.py
-│   ├── storage/         database.py, models.py
-│   ├── execution/       simulate.py (external candles/events), paper.py
+│   ├── config/            settings.py (Pydantic v2 strict validation), loader.py
+│   ├── feeds/             base.py, rss_feed.py (retry/backoff), synthetic.py, manager.py
+│   ├── classifier/        keyword_classifier.py, entity_extractor.py
+│   ├── signals/           base.py, confidence_model.py, confirmation.py,
+│   │                      energy_geo.py, ai_releases.py
+│   ├── market/            data.py, regime.py, synthetic_candles.py
+│   ├── portfolio/         engine.py, position.py, risk.py, metrics.py
+│   ├── research/          event_study.py, walkforward.py
+│   ├── storage/           database.py, models.py
+│   ├── execution/         simulate.py (deterministic seed), paper.py (sandbox-first safety)
+│   ├── api/               app.py, engine.py, routes.py, state.py, ws.py
 │   ├── metrics.py
-│   └── cli.py           ← +export, +validate-config, rotating log
+│   └── cli.py             ← export, validate-config, rotating log
 ├── config/
 │   └── sample.yaml
-├── data/                (gitignored, created at runtime)
-├── logs/                (gitignored, ndbot.log written here automatically)
-├── results/             (gitignored, charts, reports, and per-run metrics.json saved here)
+├── data/                  (gitignored, created at runtime)
+├── logs/                  (gitignored, ndbot.log written here automatically)
+├── results/               (gitignored, charts, reports, per-run metrics.json)
 ├── tests/
-│   └── test_basic.py
-├── Dockerfile
+│   ├── test_basic.py      ← core pipeline + backtest + walk-forward smoke tests (21)
+│   ├── test_api.py        ← FastAPI REST + WebSocket integration tests (26)
+│   ├── test_validation.py ← data integrity, config validation, determinism (22)
+│   └── test_signals.py    ← signal generators, confidence model, classifier, NER (17 + 1)
+├── Dockerfile.backend
+├── Dockerfile.frontend
 ├── docker-compose.yml
 ├── pyproject.toml
 ├── requirements.txt
@@ -431,15 +461,19 @@ Progress is tracked commit-by-commit. Check the git log for details.
   - CLI: 8 commands (simulate, backtest, event-study, walkforward, grid, paper, status, seed-demo)
   - Deployment: ARM64 Dockerfile + docker-compose profiles
 
-- [x] **v0.2 — Reliability & Observability** *(current)*
+- [x] **v0.2 — Beta: Reliability, Observability & Quality** *(current)*
   - **Bug fix**: backtest command now correctly uses user-provided candles CSV and events JSON
   - **Bug fix**: `SimulationEngine` accepts `external_candles` / `external_events` — no more silent override
   - **New**: `ndbot export` — export trades/events from any run to CSV or JSON
   - **New**: `ndbot validate-config` — health-check table for config values; optional feed URL reachability check
-  - **New**: Rotating log file — all runs automatically write to `logs/ndbot.log` (10 MB × 3 backups)
+  - **New**: Rotating log file — all runs automatically write to `logs/ndbot.log` (5 MB × 3 backups)
   - **New**: Per-run metrics JSON — `results/run_{id}_metrics.json` saved automatically after simulate/paper
   - **New**: RSS retry/backoff — up to 3 attempts with 2s/4s/8s exponential backoff on 429 and timeouts
-  - **New**: GitHub Actions CI — ruff lint + black format check + mypy + pytest + Docker ARM64 build on every push
+  - **New**: GitHub Actions CI — ruff lint + mypy + pytest (87 tests + coverage) + CLI smoke + Docker ARM64 build
+  - **New**: FastAPI dashboard API — REST + WebSocket backend for live trading state
+  - **New**: Docker multi-stage — separate `Dockerfile.backend` (FastAPI) and `Dockerfile.frontend` (nginx)
+  - **New**: Full test suite — 87 tests: API integration, signal generation, data integrity, determinism
+  - **Quality**: All public functions type-annotated; Pydantic v2 strict field validation; 0 ruff errors
 
 ### Planned
 
@@ -464,14 +498,19 @@ Progress is tracked commit-by-commit. Check the git log for details.
 
 ## Changelog
 
-### v0.2 — 2026-03-03
+### v0.2 — 2026-03-14 — **Beta**
+- **Upgrade project from alpha to beta research framework**
 - Fix backtest CLI to correctly inject external candles and events into `SimulationEngine`
 - Add `ndbot export` command (CSV/JSON for trades and events)
 - Add `ndbot validate-config` command with optional feed URL check
-- Add rotating file log handler (`logs/ndbot.log`, 10 MB × 3 backups, DEBUG level)
+- Add rotating file log handler (`logs/ndbot.log`, 5 MB × 3 backups)
 - Add automatic per-run metrics JSON export to `results/`
 - Add exponential backoff retry (3 attempts, 2s/4s/8s) to RSS feed fetcher
-- Add GitHub Actions CI workflow (lint + type-check + pytest + Docker ARM64 build)
+- Add GitHub Actions CI workflow (ruff + mypy + pytest 87 tests + CLI smoke + Docker ARM64 build)
+- Add FastAPI dashboard API (`src/ndbot/api/`) with REST endpoints and WebSocket
+- Add Docker multi-stage build: `Dockerfile.backend` (FastAPI/uvicorn) + `Dockerfile.frontend` (nginx)
+- Add full pytest test suite: 87 tests covering API, signals, data integrity, determinism
+- Strict Pydantic v2 field validation; all public functions type-annotated; 0 ruff errors
 
 ### v0.1 — 2026-03-03
 - Initial production-grade framework: 50 files, 6820 lines

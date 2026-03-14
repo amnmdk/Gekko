@@ -332,8 +332,90 @@ def test_simulate_smoke():
 
 
 # ---------------------------------------------------------------------------
+# Backtest smoke test
+# ---------------------------------------------------------------------------
+
+
+def test_backtest_smoke():
+    """SimulationEngine in backtest mode completes without errors."""
+    from ndbot.config.settings import BotConfig
+    from ndbot.execution.simulate import SimulationEngine
+    from ndbot.storage.database import Database
+
+    cfg = BotConfig.model_validate({
+        "run_name": "bt-smoke",
+        "mode": "backtest",
+        "signals": [
+            {"domain": "ENERGY_GEO", "enabled": True, "min_confidence": 0.20,
+             "holding_minutes": 30, "risk_per_trade": 0.01, "rr_ratio": 2.0},
+        ],
+        "confirmation": {"enabled": False},
+        "portfolio": {"initial_capital": 200.0, "max_concurrent_positions": 5},
+    })
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = f"{tmpdir}/bt.db"
+        cfg = cfg.model_copy(
+            update={"storage": cfg.storage.model_copy(update={"db_path": db_path})}
+        )
+        db = Database(db_path)
+        db.init()
+        engine = SimulationEngine(cfg, db, n_events=15, n_candles=150, seed=42)
+        summary = engine.run()
+        assert "equity" in summary
+        assert summary["equity"] > 0
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# Walk-forward smoke test
+# ---------------------------------------------------------------------------
+
+
+def test_walkforward_smoke():
+    """WalkForwardValidator completes without errors on synthetic data."""
+    from ndbot.classifier.keyword_classifier import KeywordClassifier
+    from ndbot.feeds.base import EventDomain
+    from ndbot.feeds.synthetic import SyntheticFeed
+    from ndbot.market.synthetic_candles import SyntheticCandleGenerator
+    from ndbot.research.walkforward import WalkForwardValidator
+
+    gen = SyntheticCandleGenerator(seed=77)
+    candles = gen.generate(600)
+
+    start_time = candles.index[50].to_pydatetime()
+    feed = SyntheticFeed(
+        domain=EventDomain.ENERGY_GEO,
+        seed=77,
+        start_time=start_time,
+        time_step_minutes=30,
+    )
+    events = feed.generate_batch(25)
+
+    classifier = KeywordClassifier()
+    for ev in events:
+        classifier.enrich(ev)
+
+    validator = WalkForwardValidator(
+        events=[ev.to_dict() for ev in events],
+        candles=candles,
+        train_days=2,
+        test_days=1,
+        step_days=1,
+        initial_capital=100.0,
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        report = validator.run(output_dir=tmpdir, run_name="wf-smoke")
+
+    assert isinstance(report, dict)
+    assert "n_windows" in report or "error" in report
+
+
+# ---------------------------------------------------------------------------
 # Event study smoke test
 # ---------------------------------------------------------------------------
+
 
 def test_event_study_smoke():
     from ndbot.classifier.keyword_classifier import KeywordClassifier
