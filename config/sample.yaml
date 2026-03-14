@@ -1,0 +1,150 @@
+# ============================================================
+# ndbot — Sample Configuration File
+# ============================================================
+# Copy this file and customise for your use case.
+# Environment overrides: NDBOT__SECTION__KEY=value
+# ============================================================
+
+run_name: "my-research-run"
+
+# Execution mode: simulate | backtest | paper
+mode: simulate
+
+log_level: INFO
+
+# ------------------------------------------------------------
+# Market data
+# ------------------------------------------------------------
+market:
+  symbol: "BTC/USDT"
+  timeframe: "5m"
+  candle_window: 300
+  atr_period: 14
+  atr_percentile_window: 100
+  ma_short: 20
+  ma_long: 50
+
+# ------------------------------------------------------------
+# RSS Feeds
+# Supported domains: ENERGY_GEO | AI_RELEASES
+# credibility_weight: 0.0 to 2.0 (default 1.0)
+# ------------------------------------------------------------
+feeds:
+  # -- ENERGY_GEO feeds --
+  - name: "reuters-commodities"
+    url: "https://feeds.reuters.com/reuters/commoditiesNews"
+    domain: ENERGY_GEO
+    poll_interval_seconds: 60
+    credibility_weight: 1.8
+    enabled: true
+
+  - name: "ft-energy"
+    url: "https://www.ft.com/rss/home/energy"
+    domain: ENERGY_GEO
+    poll_interval_seconds: 120
+    credibility_weight: 1.7
+    enabled: false   # Enable when ready
+
+  - name: "oilprice-news"
+    url: "https://oilprice.com/rss/main"
+    domain: ENERGY_GEO
+    poll_interval_seconds: 90
+    credibility_weight: 1.2
+    enabled: false
+
+  # -- AI_RELEASES feeds --
+  - name: "techcrunch-ai"
+    url: "https://techcrunch.com/feed/"
+    domain: AI_RELEASES
+    poll_interval_seconds: 120
+    credibility_weight: 1.5
+    enabled: true
+
+  - name: "openai-blog"
+    url: "https://openai.com/blog/rss.xml"
+    domain: AI_RELEASES
+    poll_interval_seconds: 300
+    credibility_weight: 2.0
+    enabled: true
+
+  - name: "anthropic-news"
+    url: "https://www.anthropic.com/news/feed.rss"
+    domain: AI_RELEASES
+    poll_interval_seconds: 300
+    credibility_weight: 2.0
+    enabled: true
+
+  - name: "the-decoder"
+    url: "https://the-decoder.com/feed/"
+    domain: AI_RELEASES
+    poll_interval_seconds: 180
+    credibility_weight: 1.3
+    enabled: false
+
+# ------------------------------------------------------------
+# Signal generators (one per domain)
+# ------------------------------------------------------------
+signals:
+  - domain: ENERGY_GEO
+    enabled: true
+    min_confidence: 0.45    # [0, 1] — minimum confidence to emit signal
+    holding_minutes: 60     # Maximum position hold time
+    risk_per_trade: 0.01    # 1% of equity per trade
+    rr_ratio: 2.0           # Risk:reward ratio
+
+  - domain: AI_RELEASES
+    enabled: true
+    min_confidence: 0.45
+    holding_minutes: 45
+    risk_per_trade: 0.01
+    rr_ratio: 2.0
+
+# ------------------------------------------------------------
+# Confirmation engine
+# ------------------------------------------------------------
+confirmation:
+  enabled: true
+  breakout_threshold: 0.002         # 0.2% beyond recent high/low
+  volume_spike_multiplier: 1.5      # Volume must exceed 1.5x avg
+  volatility_expansion_multiplier: 1.3
+  lookback_candles: 20
+
+# ------------------------------------------------------------
+# Portfolio / risk management
+# ------------------------------------------------------------
+portfolio:
+  initial_capital: 100.0            # USD (fictional in simulate mode)
+  currency: USD
+  max_concurrent_positions: 3
+  max_daily_loss_pct: 0.05          # 5% daily loss stops trading
+  max_drawdown_pct: 0.15            # 15% drawdown circuit breaker
+  time_stop_minutes: 240            # Force close after 4 hours
+  commission_rate: 0.001            # 0.1% per side
+  slippage_rate: 0.0005             # 0.05% simulate slippage
+
+# ------------------------------------------------------------
+# Storage
+# ------------------------------------------------------------
+storage:
+  db_path: "data/ndbot.db"
+  events_retention_days: 365
+
+# ------------------------------------------------------------
+# Paper trading (only used in paper mode)
+# ------------------------------------------------------------
+paper:
+  exchange_id: "binance"
+  dry_run: true             # TRUE BY DEFAULT — no real orders
+  require_sandbox: true     # REFUSE if sandbox unavailable
+  api_key: null             # Set via env: NDBOT__PAPER__API_KEY
+  api_secret: null          # Set via env: NDBOT__PAPER__API_SECRET
+
+# ------------------------------------------------------------
+# Research parameters
+# ------------------------------------------------------------
+research:
+  pre_event_candles: 12     # 1h of 5m candles before event
+  post_event_candles: 48    # 4h of 5m candles after event
+  train_days: 1095          # 3 years training window
+  test_days: 365            # 1 year test window
+  step_days: 90             # Roll step (quarterly)
