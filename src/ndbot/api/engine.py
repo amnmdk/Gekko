@@ -31,30 +31,14 @@ logger = logging.getLogger(__name__)
 # Simulated price store (BTC and ETH as proxies)
 # ---------------------------------------------------------------------------
 
-_PRICES: dict[str, float] = {
-    "BTC/USDT": 65_000.0,
-    "ETH/USDT": 3_500.0,
-}
-
 _DOMAIN_SYMBOLS: dict[EventDomain, str] = {
     EventDomain.ENERGY_GEO: "BTC/USDT",
     EventDomain.AI_RELEASES: "ETH/USDT",
 }
 
-# Risk per trade: 2 % of balance, min €5, max €50
-_RISK_PCT = 0.02
-_RISK_MIN = 5.0
-_RISK_MAX = 50.0
-
-# SL / TP as fraction of price
-_SL_PCT = 0.020   # 2 %
-_TP_PCT = 0.040   # 4 %  (2:1 R:R)
-
-# Max ticks a position can stay open (each tick ≈ 25 s real time)
+_SL_PCT = 0.020
+_TP_PCT = 0.040
 _MAX_TICKS = 12
-
-# Confidence threshold to open a trade
-_MIN_CONFIDENCE = 0.40
 
 
 class MockTradingEngine:
@@ -71,7 +55,8 @@ class MockTradingEngine:
         self._state = state
         self._tick_interval = tick_interval
         self._rng = random.Random(seed)
-        self._prices = dict(_PRICES)
+        # Prices live in state so REST routes + WS can serve them
+        self._state.prices = {"BTC/USDT": 65_000.0, "ETH/USDT": 3_500.0}
         self._position_ticks: dict[str, int] = {}  # trade_id → open tick count
         self._running = False
         self._classifier = KeywordClassifier()
@@ -97,7 +82,8 @@ class MockTradingEngine:
                 await self._tick()
             except Exception as exc:
                 logger.exception("Engine tick error: %s", exc)
-            await asyncio.sleep(self._tick_interval)
+            interval = float(self._state.config.get("tick_interval", self._tick_interval))
+            await asyncio.sleep(interval)
 
     def stop(self) -> None:
         self._running = False
@@ -148,10 +134,13 @@ class MockTradingEngine:
         await self._state.broadcast({"type": "event", "data": entry.to_dict()})
 
         # 6. Maybe open a trade
+        cfg = self._state.config
+        min_conf = float(cfg.get("min_confidence", 0.40))
+        max_pos = int(cfg.get("max_positions", 3))
         if (
             direction != "NEUTRAL"
-            and confidence >= _MIN_CONFIDENCE
-            and len(self._state.open_positions) < 3
+            and confidence >= min_conf
+            and len(self._state.open_positions) < max_pos
             and self._state.balance > 20
         ):
             await self._open_trade(event, direction, confidence, lat, lon)
@@ -172,11 +161,9 @@ class MockTradingEngine:
         lon: float,
     ) -> None:
         symbol = _DOMAIN_SYMBOLS.get(event.domain, "BTC/USDT")
-        price = self._prices[symbol]
-        size_eur = max(
-            _RISK_MIN,
-            min(_RISK_MAX, self._state.balance * _RISK_PCT * confidence),
-        )
+        price = self._state.prices[symbol]
+        risk_pct = float(self._state.config.get("risk_pct", 0.02))
+        size_eur = max(5.0, min(50.0, self._state.balance * risk_pct * confidence))
         trade_id = str(uuid.uuid4())[:8]
         trade = TradeEntry(
             id=trade_id,
@@ -203,14 +190,19 @@ class MockTradingEngine:
 
     async def _update_positions(self, latest_event: NewsEvent) -> None:
         """Apply price movement and check SL/TP/expiry for every open position."""
-        # Drift prices based on latest event sentiment
         self._apply_price_shock(latest_event)
+
+        # Broadcast live prices every tick so the UI can show them
+        await self._state.broadcast({
+            "type": "price_update",
+            "data": dict(self._state.prices),
+        })
 
         closed: list[str] = []
         async with self._state._lock:
             for tid, trade in list(self._state.open_positions.items()):
                 self._position_ticks[tid] = self._position_ticks.get(tid, 0) + 1
-                price = self._prices[trade.symbol]
+                price = self._state.prices[trade.symbol]
                 entry = trade.entry_price
                 direction = trade.direction
 
@@ -236,7 +228,7 @@ class MockTradingEngine:
                     elif price <= entry * (1 - _TP_PCT):
                         status = "TP_HIT"
 
-                if status is None and self._position_ticks[tid] >= _MAX_TICKS:
+                if status is None and self._position_ticks[tid] >= _MAX_TICKS:  # noqa: E501
                     status = "EXPIRED"
 
                 if status:
@@ -254,6 +246,7 @@ class MockTradingEngine:
                         self._state.winning_trades += 1
                     self._state.trades.insert(0, trade)
                     self._state.trades = self._state.trades[:500]
+                    self._state.record_equity()   # append to equity curve
                     closed.append(tid)
                     logger.info(
                         "CLOSE %s %s (%s) PnL=%.2f EUR | balance=%.2f",
@@ -287,18 +280,14 @@ class MockTradingEngine:
     # ------------------------------------------------------------------
 
     def _apply_price_shock(self, event: NewsEvent) -> None:
-        """
-        Apply a small sentiment-driven drift to the relevant symbol.
-        Also add a tiny random walk to all symbols each tick.
-        """
         symbol = _DOMAIN_SYMBOLS.get(event.domain, "BTC/USDT")
-        for sym in self._prices:
+        for sym in self._state.prices:
             # Base random walk: ±0.15 %
             drift = self._rng.gauss(0, 0.0015)
             # Sentiment shock on the relevant symbol only
             if sym == symbol:
                 drift += event.sentiment_score * 0.008
-            self._prices[sym] = round(self._prices[sym] * (1 + drift), 2)
+            self._state.prices[sym] = round(self._state.prices[sym] * (1 + drift), 2)
 
     # ------------------------------------------------------------------
     # Signal helpers (lightweight, no full config needed)

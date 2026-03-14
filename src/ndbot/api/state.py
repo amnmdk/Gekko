@@ -14,12 +14,12 @@ from typing import Any
 class EventEntry:
     id: str
     timestamp: str
-    domain: str          # "ENERGY_GEO" | "AI_RELEASES"
+    domain: str
     headline: str
     summary: str
     sentiment: float
     importance: float
-    direction: str       # "LONG" | "SHORT" | "NEUTRAL"
+    direction: str
     confidence: float
     lat: float
     lon: float
@@ -34,13 +34,13 @@ class TradeEntry:
     opened_at: str
     closed_at: str | None
     symbol: str
-    direction: str       # "LONG" | "SHORT"
-    size_eur: float      # EUR amount risked
+    direction: str
+    size_eur: float
     entry_price: float
     exit_price: float | None
     pnl_eur: float
     pnl_pct: float
-    status: str          # "OPEN" | "CLOSED" | "SL_HIT" | "TP_HIT" | "EXPIRED"
+    status: str
     event_headline: str
     lat: float
     lon: float
@@ -66,6 +66,26 @@ class AppState:
         self._lock = asyncio.Lock()
         self._ws_clients: set = set()
 
+        # Equity curve: [{ts, balance}] kept to 1000 points
+        self.equity_curve: list[dict] = [
+            {"ts": self.started_at, "balance": initial_capital}
+        ]
+
+        # Live prices synced from engine each tick
+        self.prices: dict[str, float] = {
+            "BTC/USDT": 65_000.0,
+            "ETH/USDT": 3_500.0,
+        }
+
+        # Runtime config — can be patched via /api/config without restart
+        self.config: dict[str, Any] = {
+            "initial_capital": initial_capital,
+            "tick_interval": 25.0,
+            "risk_pct": 0.02,
+            "min_confidence": 0.40,
+            "max_positions": 3,
+        }
+
     # ------------------------------------------------------------------
     # Derived metrics
     # ------------------------------------------------------------------
@@ -90,6 +110,29 @@ class AppState:
             return 0.0
         return round((self.winning_trades / self.total_trades) * 100, 1)
 
+    @property
+    def profit_factor(self) -> float | None:
+        wins = sum(t.pnl_eur for t in self.trades if t.pnl_eur > 0)
+        losses = abs(sum(t.pnl_eur for t in self.trades if t.pnl_eur <= 0))
+        if losses == 0:
+            return None
+        return round(wins / losses, 3)
+
+    @property
+    def avg_trade_pnl(self) -> float:
+        if not self.trades:
+            return 0.0
+        return round(sum(t.pnl_eur for t in self.trades) / len(self.trades), 2)
+
+    def record_equity(self) -> None:
+        """Append current balance to the equity curve after a balance change."""
+        self.equity_curve.append({
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "balance": round(self.balance, 2),
+        })
+        if len(self.equity_curve) > 1000:
+            self.equity_curve = self.equity_curve[-1000:]
+
     def summary(self) -> dict[str, Any]:
         return {
             "running": self.running,
@@ -103,6 +146,10 @@ class AppState:
             "total_trades": self.total_trades,
             "open_positions": len(self.open_positions),
             "win_rate": self.win_rate,
+            "profit_factor": self.profit_factor,
+            "avg_trade_pnl": self.avg_trade_pnl,
+            "prices": dict(self.prices),
+            "config": dict(self.config),
         }
 
     # ------------------------------------------------------------------

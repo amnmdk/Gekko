@@ -36,6 +36,8 @@ async def websocket_endpoint(websocket: WebSocket):
                 "events": [e.to_dict() for e in _state.events[:50]],
                 "positions": [p.to_dict() for p in _state.open_positions.values()],
                 "trades": [t.to_dict() for t in _state.trades[:50]],
+                "equity_curve": _state.equity_curve[-200:],
+                "prices": dict(_state.prices),
             },
         })
 

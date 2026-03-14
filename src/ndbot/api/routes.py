@@ -1,7 +1,10 @@
 """REST API routes for the ndbot web dashboard."""
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 
 from .state import AppState
 
@@ -96,5 +99,51 @@ async def reset_bot(capital: float = Query(default=500.0, ge=10.0, le=100_000.0)
         s.trades.clear()
         s.events.clear()
         s.open_positions.clear()
+        s.equity_curve = [{"ts": s.started_at, "balance": capital}]
+        s.config["initial_capital"] = capital
     await s.broadcast({"type": "reset", "data": s.summary()})
     return {"message": f"Bot reset. New balance: {capital:.2f} EUR"}
+
+
+@router.get("/equity-curve")
+async def get_equity_curve(limit: int = Query(default=200, ge=1, le=1000)):
+    """Balance history for drawing the equity chart."""
+    s = _get_state()
+    return s.equity_curve[-limit:]
+
+
+@router.get("/prices")
+async def get_prices():
+    """Current live simulated prices."""
+    return _get_state().prices
+
+
+@router.get("/health")
+async def health():
+    s = _get_state()
+    return {"status": "ok", "running": s.running, "balance": round(s.balance, 2)}
+
+
+class ConfigPatch(BaseModel):
+    tick_interval: float | None = None    # seconds between ticks (5–300)
+    risk_pct: float | None = None          # fraction of balance risked per trade
+    min_confidence: float | None = None    # min confidence to open a trade
+    max_positions: int | None = None       # max simultaneous open positions
+
+
+@router.patch("/config")
+async def patch_config(patch: ConfigPatch) -> dict[str, Any]:
+    """Update runtime trading parameters without restarting."""
+    s = _get_state()
+    updates = patch.model_dump(exclude_none=True)
+    if "tick_interval" in updates:
+        updates["tick_interval"] = max(5.0, min(300.0, updates["tick_interval"]))
+    if "risk_pct" in updates:
+        updates["risk_pct"] = max(0.001, min(0.10, updates["risk_pct"]))
+    if "min_confidence" in updates:
+        updates["min_confidence"] = max(0.0, min(1.0, updates["min_confidence"]))
+    if "max_positions" in updates:
+        updates["max_positions"] = max(1, min(10, updates["max_positions"]))
+    s.config.update(updates)
+    await s.broadcast({"type": "config_update", "data": dict(s.config)})
+    return {"message": "Config updated", "config": dict(s.config)}
