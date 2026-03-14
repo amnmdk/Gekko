@@ -19,11 +19,13 @@ from ..feeds.base import NewsEvent
 
 
 def _logit(p: float) -> float:
+    """Convert probability *p* to log-odds, clamped to avoid ±infinity."""
     p = max(1e-9, min(1 - 1e-9, p))
     return math.log(p / (1 - p))
 
 
 def _sigmoid(x: float) -> float:
+    """Convert log-odds *x* back to probability [0, 1]."""
     return 1.0 / (1.0 + math.exp(-x))
 
 
@@ -62,6 +64,7 @@ class ConfidenceModel:
         return score
 
     def _compute(self, event: NewsEvent) -> float:
+        """Bayesian log-odds update across five evidence dimensions."""
         # Start at log-odds of prior 0.5 (= 0)
         log_odds = 0.0
 
@@ -96,6 +99,7 @@ class ConfidenceModel:
         return round(min(0.95, max(0.05, raw)), 4)
 
     def _prune_memory(self) -> None:
+        """Remove events older than the memory window."""
         cutoff = datetime.now(timezone.utc) - self._memory_window
         self._recent_events = [
             ev for ev in self._recent_events if ev.ingested_at >= cutoff

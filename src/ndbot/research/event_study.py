@@ -164,7 +164,7 @@ class EventStudy:
             ts = pd.Timestamp(event["published_at"]).tz_localize("UTC") \
                 if pd.Timestamp(event["published_at"]).tzinfo is None \
                 else pd.Timestamp(event["published_at"]).tz_convert("UTC")
-        except Exception:
+        except (ValueError, TypeError, KeyError):
             return None
 
         # Find nearest candle index

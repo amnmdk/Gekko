@@ -46,13 +46,25 @@ config/secrets.yaml
 .DS_Store
 Thumbs.db
 
+# SQLite temporary files
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Claude Code
+.claude/
+
 # pytest
 .pytest_cache/
 .coverage
+coverage.xml
 htmlcov/
 
 # mypy
 .mypy_cache/
+
+# ruff
+.ruff_cache/
 
 # Docker
 .dockerignore

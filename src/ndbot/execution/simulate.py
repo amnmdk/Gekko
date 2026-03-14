@@ -231,7 +231,7 @@ class SimulationEngine:
                     if ts.tzinfo is None:
                         ts = ts.tz_localize("UTC")
                     published_at = ts.to_pydatetime()
-                except Exception:
+                except (ValueError, TypeError):
                     published_at = datetime.now(timezone.utc)
                 ev = NewsEvent(
                     event_id=d.get("event_id", NewsEvent.make_id(

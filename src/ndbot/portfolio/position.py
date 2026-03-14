@@ -54,25 +54,30 @@ class Position:
     confidence: float = 0.0
 
     def notional_value(self) -> float:
+        """Return the notional value of the position (entry_price * size)."""
         return self.entry_price * self.size
 
     def unrealised_pnl(self, current_price: float) -> float:
+        """Compute mark-to-market PnL at *current_price* (before commission)."""
         if self.direction == "LONG":
             return (current_price - self.entry_price) * self.size
         else:
             return (self.entry_price - current_price) * self.size
 
     def is_expired(self, current_time: datetime) -> bool:
+        """Return True if the position has exceeded its maximum holding period."""
         elapsed = (current_time - self.entry_time).total_seconds() / 60
         return elapsed >= self.holding_minutes
 
     def should_stop_loss(self, current_price: float) -> bool:
+        """Return True if *current_price* has breached the stop-loss level."""
         if self.direction == "LONG":
             return current_price <= self.stop_loss
         else:
             return current_price >= self.stop_loss
 
     def should_take_profit(self, current_price: float) -> bool:
+        """Return True if *current_price* has reached the take-profit level."""
         if self.direction == "LONG":
             return current_price >= self.take_profit
         else:
@@ -85,6 +90,7 @@ class Position:
         reason: CloseReason,
         commission_rate: float = 0.001,
     ) -> None:
+        """Close the position and compute realised PnL net of commission."""
         self.exit_price = exit_price
         self.exit_time = exit_time
         self.close_reason = reason
@@ -101,7 +107,7 @@ class Position:
         self.commission_paid = entry_comm + exit_comm
         self.realised_pnl = gross_pnl - self.commission_paid
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, object]:
         return {
             "position_id": self.position_id,
             "symbol": self.symbol,

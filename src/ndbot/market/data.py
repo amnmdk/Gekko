@@ -122,24 +122,29 @@ class MarketDataFeed:
 
     @property
     def candles(self) -> pd.DataFrame:
+        """The full in-memory candle buffer with indicators."""
         return self._candles
 
     def current_price(self) -> float:
+        """Return the latest close price, or 0.0 if no candles loaded."""
         if self._candles.empty:
             return 0.0
         return float(self._candles["close"].iloc[-1])
 
     def current_atr(self) -> float:
+        """Return the latest ATR value, or 0.0 if unavailable."""
         if self._candles.empty or "atr" not in self._candles.columns:
             return 0.0
         return float(self._candles["atr"].dropna().iloc[-1])
 
     def volatility_regime(self) -> VolatilityRegime:
+        """Detect the current volatility regime from candle data."""
         if self._candles.empty:
             return VolatilityRegime.NORMAL
         return self._regime.detect_volatility_regime(self._candles)
 
     def regime_summary(self) -> dict:
+        """Return a dict with volatility and trend regime labels."""
         if self._candles.empty:
             return {"volatility_regime": "NORMAL", "trend_regime": "SIDEWAYS"}
         return self._regime.get_regime_summary(self._candles)
@@ -159,6 +164,7 @@ class MarketDataFeed:
     # ------------------------------------------------------------------
 
     def _tf_minutes(self) -> int:
+        """Parse timeframe string (e.g. '5m', '1h') into minutes."""
         tf = self._mc.timeframe
         multipliers = {"m": 1, "h": 60, "d": 1440}
         try:
@@ -169,6 +175,7 @@ class MarketDataFeed:
             return 5
 
     async def _fetch_live_candles(self) -> None:
+        """Fetch OHLCV history from the exchange and apply indicators."""
         if self._exchange is None:
             return
         try:
@@ -184,5 +191,5 @@ class MarketDataFeed:
             df = df.set_index("timestamp").sort_index()
             self._candles = self._regime.add_indicators(df)
             logger.info("Fetched %d live candles from exchange", len(self._candles))
-        except Exception as exc:
+        except (ConnectionError, TimeoutError, RuntimeError, ValueError) as exc:
             logger.error("Failed to fetch candles: %s", exc)

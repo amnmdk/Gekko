@@ -23,6 +23,22 @@ from .position import Position
 
 logger = logging.getLogger(__name__)
 
+# ATR multiplier for stop-loss distance (1.5 × ATR from entry)
+ATR_STOP_MULTIPLIER = 1.5
+
+# Fallback stop distance as fraction of entry price when ATR is zero
+FALLBACK_STOP_FRACTION = 0.01
+
+# Regime-based sizing multipliers
+REGIME_SIZE_MULTIPLIER = {
+    VolatilityRegime.LOW: 1.25,
+    VolatilityRegime.NORMAL: 1.0,
+    VolatilityRegime.HIGH: 0.6,
+}
+
+# Minimum confidence scaling factor (confidence below this → 30% size)
+MIN_CONFIDENCE_SCALE = 0.3
+
 
 @dataclass
 class SizingResult:
@@ -80,9 +96,9 @@ class RiskEngine:
             )
 
         # --- Stop placement ---
-        stop_distance = 1.5 * atr
+        stop_distance = ATR_STOP_MULTIPLIER * atr
         if stop_distance <= 0:
-            stop_distance = entry_price * 0.01  # fallback: 1%
+            stop_distance = entry_price * FALLBACK_STOP_FRACTION
 
         if direction == "LONG":
             stop_loss = entry_price - stop_distance
@@ -94,14 +110,10 @@ class RiskEngine:
         stop_loss = max(0.01, stop_loss)
 
         # --- Regime sizing multiplier ---
-        regime_mult = {
-            VolatilityRegime.LOW: 1.25,
-            VolatilityRegime.NORMAL: 1.0,
-            VolatilityRegime.HIGH: 0.6,
-        }[regime]
+        regime_mult = REGIME_SIZE_MULTIPLIER[regime]
 
         # --- Confidence scaling: reduce size if low confidence ---
-        conf_mult = max(0.3, min(1.0, confidence))
+        conf_mult = max(MIN_CONFIDENCE_SCALE, min(1.0, confidence))
 
         # --- Fixed fractional sizing ---
         effective_risk_fraction = risk_fraction * regime_mult * conf_mult
@@ -144,6 +156,7 @@ class RiskEngine:
         self._peak_equity = max(self._peak_equity, current_equity)
 
     def drawdown_fraction(self, current_equity: float) -> float:
+        """Return current drawdown as a fraction [0, 1] from peak equity."""
         if self._peak_equity <= 0:
             return 0.0
         return max(0.0, (self._peak_equity - current_equity) / self._peak_equity)
@@ -151,6 +164,7 @@ class RiskEngine:
     def _check_pre_trade(
         self, equity: float, open_positions: list[Position]
     ) -> Optional[str]:
+        """Run pre-trade risk checks. Returns rejection reason or None."""
         # Max concurrent positions
         n_open = len([p for p in open_positions if p.status.value == "OPEN"])
         if n_open >= self._cfg.max_concurrent_positions:
