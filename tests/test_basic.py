@@ -4,14 +4,12 @@ Run with: pytest tests/ -v
 """
 from __future__ import annotations
 
-import json
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 import yaml
-
 
 # ---------------------------------------------------------------------------
 # Config
@@ -94,8 +92,8 @@ def test_news_event_id_deterministic():
 # ---------------------------------------------------------------------------
 
 def test_keyword_classifier_energy_geo():
-    from ndbot.feeds.base import EventDomain, NewsEvent
     from ndbot.classifier.keyword_classifier import KeywordClassifier
+    from ndbot.feeds.base import EventDomain, NewsEvent
 
     feed_ev = NewsEvent(
         event_id="abc",
@@ -114,8 +112,8 @@ def test_keyword_classifier_energy_geo():
 
 
 def test_keyword_classifier_ai_releases():
-    from ndbot.feeds.base import EventDomain, NewsEvent
     from ndbot.classifier.keyword_classifier import KeywordClassifier
+    from ndbot.feeds.base import EventDomain, NewsEvent
 
     feed_ev = NewsEvent(
         event_id="def",
@@ -161,8 +159,8 @@ def test_synthetic_candle_generator():
 
 
 def test_regime_detector():
-    from ndbot.market.synthetic_candles import SyntheticCandleGenerator
     from ndbot.market.regime import RegimeDetector, VolatilityRegime
+    from ndbot.market.synthetic_candles import SyntheticCandleGenerator
 
     gen = SyntheticCandleGenerator(seed=42)
     df = gen.generate(200)
@@ -227,7 +225,7 @@ def test_risk_sizing():
 
 
 def test_position_pnl():
-    from ndbot.portfolio.position import Position, PositionStatus, CloseReason
+    from ndbot.portfolio.position import CloseReason, Position, PositionStatus
 
     pos = Position(
         position_id="test-pos-1",
@@ -301,6 +299,7 @@ def test_database_events():
         events = db.get_events(run_id="run-1")
         assert len(events) == 1
         assert events[0]["headline"] == "Test event"
+        db.close()  # Release SQLite handle before tempdir cleanup (required on Windows)
 
 
 # ---------------------------------------------------------------------------
@@ -310,8 +309,8 @@ def test_database_events():
 def test_simulate_smoke():
     """Full end-to-end smoke test — should complete without errors."""
     from ndbot.config.settings import BotConfig
-    from ndbot.storage.database import Database
     from ndbot.execution.simulate import SimulationEngine
+    from ndbot.storage.database import Database
 
     cfg = BotConfig.model_validate(_make_minimal_config())
 
@@ -329,6 +328,7 @@ def test_simulate_smoke():
         assert "equity" in summary
         assert "total_trades" in summary
         assert summary["equity"] > 0
+        db.close()  # Release SQLite handle before tempdir cleanup (required on Windows)
 
 
 # ---------------------------------------------------------------------------
@@ -336,23 +336,28 @@ def test_simulate_smoke():
 # ---------------------------------------------------------------------------
 
 def test_event_study_smoke():
+    from ndbot.classifier.keyword_classifier import KeywordClassifier
     from ndbot.feeds.base import EventDomain
     from ndbot.feeds.synthetic import SyntheticFeed
-    from ndbot.classifier.keyword_classifier import KeywordClassifier
-    from ndbot.market.synthetic_candles import SyntheticCandleGenerator
     from ndbot.market.regime import RegimeDetector
+    from ndbot.market.synthetic_candles import SyntheticCandleGenerator
     from ndbot.research.event_study import EventStudy
 
-    feed = SyntheticFeed(domain=EventDomain.ENERGY_GEO, seed=42)
-    events = feed.generate_batch(10)
-    classifier = KeywordClassifier()
-    for ev in events:
-        classifier.enrich(ev)
-
+    # Generate candles covering the last 25 hours (300 × 5-min candles)
     gen = SyntheticCandleGenerator(seed=42)
     raw = gen.generate(300)
     detector = RegimeDetector()
     candles = detector.add_indicators(raw)
+
+    # Anchor events to the middle of the candle range so pre/post windows fit
+    event_start = candles.index[80].to_pydatetime()
+    feed = SyntheticFeed(domain=EventDomain.ENERGY_GEO, seed=42,
+                         start_time=event_start, time_step_minutes=5)
+    events = feed.generate_batch(10)
+
+    classifier = KeywordClassifier()
+    for ev in events:
+        classifier.enrich(ev)
 
     study = EventStudy(candles=candles, pre_candles=6, post_candles=12)
 
@@ -363,4 +368,4 @@ def test_event_study_smoke():
             run_name="test",
         )
     assert "n_events" in report
-    assert report.get("n_events", 0) >= 0
+    assert report.get("n_events", 0) >= 1

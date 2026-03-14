@@ -4,11 +4,9 @@ Used by CLI for displaying formatted output.
 """
 from __future__ import annotations
 
-from typing import Any
-
+from rich import box
 from rich.console import Console
 from rich.table import Table
-from rich import box
 
 console = Console()
 

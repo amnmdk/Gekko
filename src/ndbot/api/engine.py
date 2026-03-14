@@ -23,7 +23,6 @@ from ..classifier.keyword_classifier import KeywordClassifier
 from ..feeds.base import EventDomain, NewsEvent
 from ..feeds.synthetic import SyntheticFeed
 from ..geo.coordinates import get_event_coordinates
-from ..signals.base import SignalDirection
 from .state import AppState, EventEntry, TradeEntry
 
 logger = logging.getLogger(__name__)

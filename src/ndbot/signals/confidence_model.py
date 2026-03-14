@@ -13,9 +13,7 @@ Each evidence dimension shifts the log-odds proportionally.
 from __future__ import annotations
 
 import math
-from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 from ..feeds.base import NewsEvent
 

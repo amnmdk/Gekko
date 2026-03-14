@@ -3,7 +3,9 @@ Map news event content to approximate geographic coordinates.
 Used to place markers on the Leaflet.js map.
 """
 from __future__ import annotations
+
 import random
+
 from ..feeds.base import EventDomain, NewsEvent
 
 # ---------------------------------------------------------------------------

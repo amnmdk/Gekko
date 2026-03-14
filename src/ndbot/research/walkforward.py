@@ -33,7 +33,6 @@ import json
 import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -176,7 +175,6 @@ class WalkForwardValidator:
             return []
         first_ts = self._candles.index[0].to_pydatetime().replace(tzinfo=timezone.utc)
         last_ts = self._candles.index[-1].to_pydatetime().replace(tzinfo=timezone.utc)
-        total_days = self._train_days + self._test_days
 
         windows = []
         step = timedelta(days=self._step_days)
@@ -264,7 +262,8 @@ class WalkForwardValidator:
         For each event above confidence threshold, simulate a trade entry.
         """
         if len(candles) == 0 or len(events) == 0:
-            return PortfolioMetrics.compute([], [self._initial_capital], self._initial_capital).to_dict()
+            empty = PortfolioMetrics.compute([], [self._initial_capital], self._initial_capital)
+            return empty.to_dict()
 
         min_conf = params.get("min_confidence", 0.45)
         risk_frac = params.get("risk_per_trade", 0.01)
@@ -278,7 +277,7 @@ class WalkForwardValidator:
 
         for ev in events:
             # Compute confidence
-            from ..feeds.base import NewsEvent, EventDomain
+            from ..feeds.base import EventDomain, NewsEvent
             try:
                 domain = EventDomain(ev.get("domain", "UNKNOWN"))
             except ValueError:
@@ -346,7 +345,8 @@ class WalkForwardValidator:
             else:
                 gross_pnl = (entry_price - exit_price) * size
 
-            commission = entry_price * size * self._commission + exit_price * size * self._commission
+            commission = (entry_price * size * self._commission
+                          + exit_price * size * self._commission)
             net_pnl = gross_pnl - commission
 
             equity += net_pnl

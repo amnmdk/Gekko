@@ -13,9 +13,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Optional
 
-import numpy as np
 import pandas as pd
 
 from ..config.settings import ConfirmationConfig
@@ -75,9 +73,6 @@ class ConfirmationEngine:
         results["volatility_expansion"] = self._check_volatility_expansion(candles)
 
         any_passed = any(results[k]["passed"] for k in results)
-        summary = "; ".join(
-            f"{k}={'PASS' if v['passed'] else 'FAIL'}" for k, v in results.items()
-        )
         reason = "any_confirmed" if any_passed else "no_confirmation"
         return ConfirmationResult(passed=any_passed, reason=reason, details=results)
 

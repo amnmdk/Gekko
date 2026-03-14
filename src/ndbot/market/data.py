@@ -6,9 +6,8 @@ In paper mode: wraps CCXT exchange API for live candle fetching.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 
 import pandas as pd
@@ -151,7 +150,6 @@ class MarketDataFeed:
 
     def append_candle(self, candle: dict) -> None:
         """Append a single candle dict to the buffer."""
-        ts = candle.get("timestamp")
         row = pd.DataFrame([candle]).set_index("timestamp")
         self._candles = pd.concat([self._candles, row]).iloc[-self._mc.candle_window:]
         self._candles = self._regime.add_indicators(self._candles)

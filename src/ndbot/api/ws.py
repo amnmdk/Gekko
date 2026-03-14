@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import logging
+
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+
 from .state import AppState
 
 logger = logging.getLogger(__name__)

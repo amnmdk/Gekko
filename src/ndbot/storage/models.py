@@ -13,15 +13,11 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
-    Boolean,
-    Column,
     DateTime,
     Float,
     Integer,
-    JSON,
     String,
     Text,
-    create_engine,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 

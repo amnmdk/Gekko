@@ -18,7 +18,7 @@ from datetime import date, datetime, timezone
 from typing import Optional
 
 from ..config.settings import PortfolioConfig
-from ..market.regime import VolatilityRegime, RegimeDetector
+from ..market.regime import VolatilityRegime
 from .position import Position
 
 logger = logging.getLogger(__name__)

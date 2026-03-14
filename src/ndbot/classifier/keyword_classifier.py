@@ -14,12 +14,9 @@ All matching is case-insensitive substring search.
 """
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
-from typing import Optional
 
 from ..feeds.base import EventDomain, NewsEvent
-
 
 # ---------------------------------------------------------------------------
 # Keyword dictionaries

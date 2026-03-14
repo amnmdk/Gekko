@@ -5,12 +5,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Callable, Awaitable
+from typing import Awaitable, Callable
 
-from ..config.settings import BotConfig, FeedConfig
+from ..config.settings import BotConfig
 from .base import BaseFeed, EventDomain, NewsEvent
 from .rss_feed import RSSFeed
-from .synthetic import SyntheticFeed
 
 logger = logging.getLogger(__name__)
 

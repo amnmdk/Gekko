@@ -17,11 +17,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-import pandas as pd
-
 from ..config.settings import BotConfig
 from ..market.data import MarketDataFeed
-from ..market.regime import VolatilityRegime
 from ..signals.base import SignalDirection, TradeSignal
 from ..signals.confirmation import ConfirmationEngine
 from .metrics import PerformanceReport, PortfolioMetrics

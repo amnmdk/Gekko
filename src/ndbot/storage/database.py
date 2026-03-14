@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 
 from ..feeds.base import NewsEvent
 from ..portfolio.position import Position
@@ -62,10 +62,12 @@ class Database:
     # Events
     # ------------------------------------------------------------------
 
+    def close(self) -> None:
+        """Dispose SQLAlchemy engine and release the SQLite file handle."""
+        self._engine.dispose()
+
     def save_event(self, event: NewsEvent, run_id: str) -> None:
         with self._Session() as session:
-            existing = session.get(EventRecord, None)
-            # Use merge/upsert by event_id
             existing = session.query(EventRecord).filter_by(
                 event_id=event.event_id
             ).first()
