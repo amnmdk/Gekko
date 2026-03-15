@@ -4,7 +4,15 @@
       "Bash(python -c \":*)",
       "Bash(git config user.email \"ndbot@research.local\")",
       "Bash(git config user.name \"ndbot\")",
-      "Bash(git add -A)"
+      "Bash(git add -A)",
+      "Bash(\"/c/Users/Amn/Downloads/Nouveau dossier/.dockerignore\":*)",
+      "Bash(python -m pytest tests/ -v)",
+      "Bash(pip install:*)",
+      "Bash(python -c \"import setuptools; print\\(setuptools.__version__\\)\")",
+      "Bash(python -m pytest tests/ -v --tb=short)",
+      "Bash(python -m ruff check src/ tests/)",
+      "Bash(python -m ruff check src/ tests/ --fix)",
+      "Bash(grep -v \"^$\")"
     ]
   }
 }
