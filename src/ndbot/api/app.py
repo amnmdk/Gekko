@@ -116,3 +116,20 @@ init_ws(state)
 
 app.include_router(router, prefix="/api")
 app.include_router(ws_router)
+
+# Alpha discovery dashboard routes
+try:
+    from ..research.alpha_routes import alpha_router, init_alpha_routes
+    init_alpha_routes()
+    app.include_router(alpha_router, prefix="/api")
+except ImportError:
+    pass  # Alpha modules not available
+
+# Serve frontend static files if available (for single-command launch)
+try:
+    from fastapi.staticfiles import StaticFiles
+    frontend_dir = Path(__file__).resolve().parents[3] / "frontend"
+    if frontend_dir.is_dir():
+        app.mount("/", StaticFiles(directory=str(frontend_dir), html=True))
+except Exception:
+    pass

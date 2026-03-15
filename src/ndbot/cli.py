@@ -996,6 +996,71 @@ def health(db: str):
 
 
 # ---------------------------------------------------------------------------
+# alpha-pipeline
+# ---------------------------------------------------------------------------
+
+@main.command("alpha-pipeline")
+@click.option("--domain", default=None, help="Filter by event domain")
+@click.option("--limit", default=5000, show_default=True)
+@click.option("--log-level", default="INFO", show_default=True)
+def alpha_pipeline(domain: str, limit: int, log_level: str):
+    """Run the automated alpha discovery pipeline."""
+    _setup_logging(log_level)
+    from .research.pipeline import ResearchPipeline
+
+    console.print(Panel(
+        "[bold cyan]ndbot ALPHA DISCOVERY PIPELINE[/bold cyan]\n"
+        f"Domain: {domain or 'ALL'} | Limit: {limit}",
+        title="ndbot", border_style="magenta"
+    ))
+
+    pipeline = ResearchPipeline()
+    result = pipeline.run(domain=domain, limit=limit)
+
+    from rich.table import Table
+    t = Table(
+        title="Pipeline Results",
+        show_header=True,
+        header_style="bold magenta",
+    )
+    t.add_column("Metric", style="cyan")
+    t.add_column("Value", justify="right")
+
+    t.add_row("Events Processed", str(result.events_processed))
+    t.add_row("Events Flagged", str(result.events_flagged))
+    t.add_row("Categories Analysed", str(result.categories_analysed))
+    t.add_row("Signals Discovered", str(result.signals_discovered))
+    t.add_row(
+        "Significant Signals",
+        str(result.signals_significant),
+    )
+    t.add_row("Hypotheses Tested", str(result.hypotheses_tested))
+    t.add_row("Hypotheses Rejected", str(result.hypotheses_rejected))
+    t.add_row("Signals Registered", str(result.signals_registered))
+
+    console.print(t)
+
+    if result.errors:
+        for err in result.errors:
+            console.print(f"  [yellow]Warning: {err}[/yellow]")
+
+    # Show registry summary
+    summary = pipeline.registry.summary()
+    console.print(f"\n[bold]Alpha Registry:[/bold] "
+                  f"{summary['total_signals']} signals")
+    for sig in summary.get("top_signals", [])[:3]:
+        console.print(
+            f"  {sig['id']:<30} "
+            f"Sharpe={sig['sharpe']:.3f}  "
+            f"[{sig['status']}]"
+        )
+
+    console.print(
+        f"\n[dim]Results: results/pipeline_runs/{result.run_id}.json[/dim]"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
