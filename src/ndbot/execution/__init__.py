@@ -1,6 +1,7 @@
 from .cost_model import TransactionCostModel
 from .deployment_pipeline import DeploymentPipeline
 from .execution_simulator import ExecutionSimulator
+from .impact_model import MarketImpactModel
 from .paper import PaperEngine
 from .simulate import SimulationEngine
 
@@ -10,4 +11,5 @@ __all__ = [
     "TransactionCostModel",
     "ExecutionSimulator",
     "DeploymentPipeline",
+    "MarketImpactModel",
 ]

@@ -1236,6 +1236,204 @@ def stress_test_cmd(log_level: str):
 
 
 # ---------------------------------------------------------------------------
+# research-lab — Full Research Lab Demo
+# ---------------------------------------------------------------------------
+
+@main.command("research-lab")
+@click.option("--log-level", default="INFO", show_default=True)
+def research_lab_cmd(log_level: str):
+    """Run full quant research lab demo pipeline."""
+    _setup_logging(log_level)
+
+    import numpy as np
+
+    from .data.news_corpus import NewsCorpus
+    from .features.event_embeddings import EventEmbeddingEngine
+    from .portfolio.optimizer import PortfolioOptimizer
+    from .portfolio.regime_strategy import RegimeStrategyEngine
+    from .research.causal_analysis import CausalAnalysisEngine
+    from .research.edge_decay import EdgeDecayMonitor
+    from .research.signal_models import SignalModelEngine
+    from .research.validation_report import ValidationReportGenerator
+    from .simulation.market_simulator import MarketSimulator
+
+    console.print(Panel(
+        "[bold cyan]QUANT ALPHA RESEARCH LAB[/bold cyan]\n"
+        "Full pipeline: corpus → embed → models → optimise → simulate",
+        title="ndbot", border_style="magenta",
+    ))
+    rng = np.random.default_rng(42)
+
+    # 1. Generate synthetic corpus
+    console.print("\n[bold]1. News Corpus[/bold]")
+    corpus = NewsCorpus()
+    records = corpus.generate_synthetic_corpus(n_records=1000)
+    corpus.ingest_records([r.to_dict() for r in records])
+    stats = corpus.compute_stats()
+    console.print(
+        f"  Records: {stats.total_records} | "
+        f"Sources: {stats.unique_sources} | "
+        f"Domains: {len(stats.records_by_domain)}"
+    )
+
+    # 2. Event embeddings
+    console.print("\n[bold]2. Event Embeddings[/bold]")
+    embed = EventEmbeddingEngine(dim=32)
+    headlines = [r.headline for r in records[:500]]
+    embed.fit(headlines)
+    similar = embed.find_similar("Oil prices surge after conflict", top_k=3)
+    console.print(f"  Vocab: {embed.vocab_size} | Fitted: {embed.is_fitted}")
+    for s in similar:
+        console.print(f"  → sim={s.similarity:.3f}: {s.headline[:60]}")
+
+    # 3. Causal analysis
+    console.print("\n[bold]3. Causal Analysis[/bold]")
+    causal = CausalAnalysisEngine()
+    event_ret = rng.normal(0.002, 0.015, 100)
+    ctrl_ret = rng.normal(0.0, 0.015, 200)
+    report = causal.analyse(event_ret, ctrl_ret, event_type="SUPPLY_DISRUPTION")
+    console.print(
+        f"  Verdict: {report.verdict} | "
+        f"Score: {report.composite_causal_score:.3f}"
+    )
+    for t in report.tests:
+        sig = "[green]✓[/green]" if t.is_significant else "[red]✗[/red]"
+        console.print(f"  {sig} {t.test_name}: p={t.p_value:.4f}")
+
+    # 4. Signal models
+    console.print("\n[bold]4. Multi-Model Comparison[/bold]")
+    n_samples = 500
+    features = rng.normal(0, 1, (n_samples, 8))
+    returns = (
+        0.3 * features[:, 0] + 0.2 * features[:, 1]
+        + rng.normal(0, 0.5, n_samples)
+    ) * 0.01
+    engine = SignalModelEngine()
+    model_report = engine.train_and_compare(
+        features, returns,
+        [f"f_{i}" for i in range(8)],
+    )
+
+    from rich.table import Table
+    t = Table(
+        title="Model Comparison",
+        show_header=True, header_style="bold magenta",
+    )
+    t.add_column("Model", style="cyan")
+    t.add_column("Sharpe", justify="right")
+    t.add_column("Hit Rate", justify="right")
+    for m in model_report.models:
+        t.add_row(
+            m.model_name,
+            f"{m.sharpe_ratio:.3f}",
+            f"{m.hit_rate * 100:.1f}%",
+        )
+    console.print(t)
+    console.print(f"  Best: {model_report.best_model}")
+
+    # 5. Portfolio optimization
+    console.print("\n[bold]5. Portfolio Optimization[/bold]")
+    opt = PortfolioOptimizer()
+    asset_returns = rng.multivariate_normal(
+        [0.001, 0.0008, 0.0012],
+        np.diag([0.04, 0.05, 0.06]) * 0.01,
+        size=252,
+    )
+    allocs = opt.compare_methods(asset_returns, ["BTC", "ETH", "SOL"])
+    for a in allocs[:3]:
+        console.print(
+            f"  {a.method:<16} Sharpe={a.sharpe_ratio:+.3f}  "
+            f"E[r]={a.expected_return * 100:+.2f}%"
+        )
+
+    # 6. Regime classification
+    console.print("\n[bold]6. Regime Classification[/bold]")
+    regime_eng = RegimeStrategyEngine()
+    regime = regime_eng.classify_regime(
+        rng.normal(0.0003, 0.015, 200),
+        rng.lognormal(10, 1, 200),
+    )
+    adapt = regime_eng.get_adaptation(regime)
+    console.print(
+        f"  Vol={regime.volatility} Macro={regime.macro} "
+        f"Liq={regime.liquidity}"
+    )
+    console.print(
+        f"  Size={adapt.size_multiplier:.2f}x "
+        f"Threshold={adapt.signal_threshold:.2f}"
+    )
+
+    # 7. Edge decay
+    console.print("\n[bold]7. Edge Decay Monitor[/bold]")
+    decay_mon = EdgeDecayMonitor()
+    decaying = rng.normal(0.001, 0.01, 200) * np.linspace(1, 0.3, 200)
+    decay_rpt = decay_mon.analyse("demo_signal", decaying)
+    decay_style = {
+        "active": "green", "warning": "yellow",
+        "critical": "red", "dead": "red",
+    }.get(decay_rpt.status, "dim")
+    console.print(
+        f"  Status: [{decay_style}]{decay_rpt.status}[/{decay_style}] | "
+        f"Sharpe: {decay_rpt.current_sharpe:.3f} | "
+        f"Decay: {decay_rpt.decay_pct:.1f}%"
+    )
+
+    # 8. Multi-agent simulation
+    console.print("\n[bold]8. Multi-Agent Simulation[/bold]")
+    sim = MarketSimulator(initial_price=100.0, seed=42)
+    sim_result = sim.run(
+        n_steps=300,
+        event_schedule=[
+            (30, 0.02), (80, -0.03), (150, 0.015), (220, -0.01),
+        ],
+    )
+    console.print(
+        f"  Steps: {sim_result.n_steps} | "
+        f"Trades: {sim_result.n_trades} | "
+        f"Events: {sim_result.events_injected}"
+    )
+    console.print(
+        f"  News Trader PnL: {sim_result.news_trader_pnl:+.2f}"
+    )
+
+    # 9. Validation report
+    console.print("\n[bold]9. Validation Report[/bold]")
+    gen = ValidationReportGenerator()
+    val = gen.generate(
+        strategy_id="lab_demo",
+        returns=rng.normal(0.0005, 0.015, 500),
+        bias_audit={
+            "bias_risk_score": 0.12,
+            "risk_level": "low",
+            "checks_failed": 0,
+        },
+        stability_score=0.82,
+        stress_results=[
+            {"survived": True, "max_drawdown_pct": 0.08},
+            {"survived": True, "max_drawdown_pct": 0.12},
+        ],
+        governance={
+            "status": "APPROVED",
+            "deployment_stage": "PAPER",
+            "deployment_cleared": True,
+        },
+    )
+    grade_map = {
+        "A": "green", "B": "green", "C": "yellow",
+        "D": "red", "F": "red",
+    }
+    g_style = grade_map.get(val.overall_grade, "dim")
+    console.print(
+        f"  Grade: [{g_style}]{val.overall_grade}[/{g_style}] "
+        f"Score: {val.overall_score:.1f}/100"
+    )
+
+    console.print(
+        "\n[bold green]Research lab demo complete![/bold green]"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 

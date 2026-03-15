@@ -125,6 +125,14 @@ try:
 except ImportError:
     pass  # Alpha modules not available
 
+# Research lab dashboard routes
+try:
+    from ..research.lab_routes import init_lab_routes, lab_router
+    init_lab_routes()
+    app.include_router(lab_router, prefix="/api")
+except ImportError:
+    pass  # Lab modules not available
+
 # Serve frontend static files if available (for single-command launch)
 try:
     from fastapi.staticfiles import StaticFiles
