@@ -1061,6 +1061,181 @@ def alpha_pipeline(domain: str, limit: int, log_level: str):
 
 
 # ---------------------------------------------------------------------------
+# validate — System Validation Report
+# ---------------------------------------------------------------------------
+
+@main.command("validate")
+@click.argument("strategy_id", default="demo_strategy")
+@click.option("--log-level", default="INFO", show_default=True)
+def validate_cmd(strategy_id: str, log_level: str):
+    """Generate a full system validation report for a strategy."""
+    _setup_logging(log_level)
+    import numpy as np
+
+    from .research.validation_report import ValidationReportGenerator
+
+    console.print(Panel(
+        "[bold cyan]SYSTEM VALIDATION REPORT[/bold cyan]\n"
+        f"Strategy: {strategy_id}",
+        title="ndbot", border_style="magenta"
+    ))
+
+    rng = np.random.default_rng(42)
+    demo_returns = rng.normal(0.0005, 0.015, 500)
+
+    generator = ValidationReportGenerator()
+    report = generator.generate(
+        strategy_id=strategy_id,
+        returns=demo_returns,
+        bias_audit={"bias_risk_score": 0.15, "risk_level": "low", "checks_failed": 0},
+        stability_score=0.78,
+        stress_results=[
+            {"survived": True, "max_drawdown_pct": 0.08},
+            {"survived": True, "max_drawdown_pct": 0.12},
+            {"survived": False, "max_drawdown_pct": 0.25},
+        ],
+        overfit_diagnostic={"overfitting_score": 0.3, "is_overfit": False},
+        governance={"status": "APPROVED", "deployment_stage": "PAPER", "deployment_cleared": True},
+    )
+
+    path = generator.save_report(report)
+
+    from rich.table import Table
+    t = Table(title="Validation Report", show_header=True, header_style="bold magenta")
+    t.add_column("Section", style="cyan")
+    t.add_column("Score", justify="right")
+    t.add_column("Status")
+
+    for name, section in report.sections.items():
+        score = section.get("score", 0)
+        status = section.get("status", "ok")
+        style = "green" if score >= 70 else "yellow" if score >= 50 else "red"
+        t.add_row(name, f"[{style}]{score:.1f}[/{style}]", status)
+
+    console.print(t)
+
+    grade_map = {"A": "green", "B": "green", "C": "yellow", "D": "red", "F": "red"}
+    grade_style = grade_map.get(report.overall_grade, "dim")
+    console.print(
+        f"\n  Overall Grade: [{grade_style}]{report.overall_grade}"
+        f"[/{grade_style}]  Score: {report.overall_score:.1f}/100"
+    )
+
+    if report.warnings:
+        for w in report.warnings:
+            console.print(f"  [yellow]⚠ {w}[/yellow]")
+    if report.failures:
+        for f in report.failures:
+            console.print(f"  [red]✗ {f}[/red]")
+
+    console.print(f"\n[dim]Report saved: {path}[/dim]")
+
+
+# ---------------------------------------------------------------------------
+# bias-audit — Research Bias Audit
+# ---------------------------------------------------------------------------
+
+@main.command("bias-audit")
+@click.option("--log-level", default="INFO", show_default=True)
+def bias_audit_cmd(log_level: str):
+    """Run a research bias audit on demo data."""
+    _setup_logging(log_level)
+    import numpy as np
+
+    from .research.bias_audit import BiasAuditor
+
+    console.print(Panel(
+        "[bold cyan]RESEARCH BIAS AUDIT[/bold cyan]",
+        title="ndbot", border_style="magenta"
+    ))
+
+    rng = np.random.default_rng(42)
+    demo_returns = rng.normal(0.0005, 0.015, 500)
+    demo_features = rng.normal(0, 1, (500, 5))
+
+    auditor = BiasAuditor()
+    result = auditor.audit(
+        returns=demo_returns,
+        features=demo_features,
+        n_strategies_tested=10,
+    )
+
+    from rich.table import Table
+    t = Table(
+        title="Bias Audit Results",
+        show_header=True, header_style="bold magenta",
+    )
+    t.add_column("Check", style="cyan")
+    t.add_column("Passed", justify="center")
+    t.add_column("Severity")
+
+    for flag in result.flags:
+        style = "red"
+        symbol = "✗"
+        t.add_row(flag.bias_type, f"[{style}]{symbol}[/{style}]", flag.severity)
+
+    if not result.flags:
+        t.add_row("All checks", "[green]✓[/green]", "none")
+
+    console.print(t)
+    console.print(
+        f"\n  Passed: {result.checks_passed}  "
+        f"Failed: {result.checks_failed}"
+    )
+
+    risk = result.bias_risk_score
+    risk_style = "green" if risk < 0.3 else "yellow" if risk < 0.6 else "red"
+    console.print(f"  Bias Risk Score: [{risk_style}]{risk:.3f}[/{risk_style}]")
+    console.print(f"  Risk Level: {result.risk_level}")
+
+
+# ---------------------------------------------------------------------------
+# stress-test — Strategy Stress Testing
+# ---------------------------------------------------------------------------
+
+@main.command("stress-test")
+@click.option("--log-level", default="INFO", show_default=True)
+def stress_test_cmd(log_level: str):
+    """Run strategy stress tests with predefined scenarios."""
+    _setup_logging(log_level)
+    import numpy as np
+
+    from .research.stress_testing import StrategyStressTester
+
+    console.print(Panel(
+        "[bold cyan]STRATEGY STRESS TESTING[/bold cyan]",
+        title="ndbot", border_style="magenta"
+    ))
+
+    rng = np.random.default_rng(42)
+    demo_returns = rng.normal(0.0005, 0.015, 500)
+
+    tester = StrategyStressTester()
+    results = tester.run_all(demo_returns)
+
+    from rich.table import Table
+    t = Table(title="Stress Test Results", show_header=True, header_style="bold magenta")
+    t.add_column("Scenario", style="cyan")
+    t.add_column("Survived", justify="center")
+    t.add_column("Max DD %", justify="right")
+    t.add_column("Recovery Bars", justify="right")
+
+    for r in results:
+        style = "green" if r.survived else "red"
+        symbol = "✓" if r.survived else "✗"
+        t.add_row(
+            r.scenario_name,
+            f"[{style}]{symbol}[/{style}]",
+            f"{r.max_drawdown_pct * 100:.1f}",
+            str(r.recovery_bars),
+        )
+
+    console.print(t)
+    survived_count = sum(1 for r in results if r.survived)
+    console.print(f"\n  Survived: {survived_count}/{len(results)} scenarios")
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
