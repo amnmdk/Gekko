@@ -49,6 +49,13 @@ _PARAM_GRID = {
     "risk_per_trade": [0.005, 0.01, 0.015, 0.02],
 }
 
+# Backtest constants
+_ATR_STOP_MULTIPLIER = 1.5        # Stop distance = ATR × this
+_ATR_LOOKBACK = 14                # Candles to compute ATR over
+_MIN_ATR_CANDLES = 5              # Minimum candles needed for ATR
+_EXIT_CANDLES = 12                # Exit after N candles (1h at 5m)
+_FALLBACK_STOP_FRACTION = 0.01   # Fallback stop as fraction of entry price
+
 
 class WalkForwardValidator:
     """
@@ -171,6 +178,7 @@ class WalkForwardValidator:
     # ------------------------------------------------------------------
 
     def _build_windows(self) -> list[tuple]:
+        """Generate (train_start, train_end, test_start, test_end) tuples."""
         if len(self._candles) == 0:
             return []
         first_ts = self._candles.index[0].to_pydatetime().replace(tzinfo=timezone.utc)
@@ -288,7 +296,7 @@ class WalkForwardValidator:
                 ts = pd.Timestamp(ts_str)
                 if ts.tzinfo is None:
                     ts = ts.tz_localize("UTC")
-            except Exception:
+            except (ValueError, TypeError):
                 continue
 
             news_ev = NewsEvent(
@@ -310,7 +318,7 @@ class WalkForwardValidator:
 
             # Find entry candle
             idx = candle_closes.index.searchsorted(ts)
-            if idx >= len(candle_closes) - 12:
+            if idx >= len(candle_closes) - _EXIT_CANDLES:
                 continue
 
             entry_price = float(candle_closes.iloc[idx])
@@ -322,22 +330,22 @@ class WalkForwardValidator:
             direction = "LONG" if sentiment >= 0 else "SHORT"
 
             # Simple ATR-based stop using candle range
-            window_start = max(0, idx - 14)
+            window_start = max(0, idx - _ATR_LOOKBACK)
             window_candles = candles.iloc[window_start:idx]
-            if len(window_candles) >= 5 and "high" in candles.columns:
+            if len(window_candles) >= _MIN_ATR_CANDLES and "high" in candles.columns:
                 atr = float(
                     (window_candles["high"] - window_candles["low"]).mean()
                 )
             else:
-                atr = entry_price * 0.01
+                atr = entry_price * _FALLBACK_STOP_FRACTION
 
-            stop_dist = 1.5 * atr
+            stop_dist = _ATR_STOP_MULTIPLIER * atr
             risk_amount = equity * risk_frac
             size = risk_amount / max(stop_dist, 1e-8)
             size = min(size, equity / max(entry_price, 1.0))
 
-            # Exit after 12 candles (1h at 5m)
-            exit_idx = min(idx + 12, len(candle_closes) - 1)
+            # Exit after _EXIT_CANDLES candles (1h at 5m)
+            exit_idx = min(idx + _EXIT_CANDLES, len(candle_closes) - 1)
             exit_price = float(candle_closes.iloc[exit_idx])
 
             if direction == "LONG":
@@ -364,6 +372,7 @@ class WalkForwardValidator:
     # ------------------------------------------------------------------
 
     def _filter_events(self, start: datetime, end: datetime) -> list[dict]:
+        """Return events with published_at in [start, end)."""
         filtered = []
         for ev in self._events:
             ts_str = ev.get("published_at", "")
@@ -374,15 +383,17 @@ class WalkForwardValidator:
                 ts_dt = ts.to_pydatetime()
                 if start <= ts_dt < end:
                     filtered.append(ev)
-            except Exception:
-                pass
+            except (ValueError, TypeError):
+                pass  # Skip events with unparsable timestamps
         return filtered
 
     def _filter_candles(self, start: datetime, end: datetime) -> pd.DataFrame:
+        """Return candles with index in [start, end)."""
         mask = (self._candles.index >= start) & (self._candles.index < end)
         return self._candles[mask]
 
     def _aggregate_windows(self, window_results: list[dict]) -> dict:
+        """Compute aggregate statistics across all OOS windows."""
         oos_list = [w["oos"] for w in window_results if w.get("oos")]
         if not oos_list:
             return {}

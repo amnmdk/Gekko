@@ -170,25 +170,31 @@ class PortfolioEngine:
 
     @property
     def equity(self) -> float:
+        """Current portfolio equity after all realised PnL."""
         return self._equity
 
     @property
     def equity_curve(self) -> list[float]:
+        """Complete equity history as a list of snapshots."""
         return list(self._equity_curve)
 
     @property
     def positions(self) -> list[Position]:
+        """All positions (open and closed)."""
         return list(self._positions)
 
     @property
     def open_positions(self) -> list[Position]:
+        """Currently open positions."""
         return [p for p in self._positions if p.status == PositionStatus.OPEN]
 
     @property
     def closed_positions(self) -> list[Position]:
+        """All closed positions."""
         return [p for p in self._positions if p.status == PositionStatus.CLOSED]
 
     def performance(self) -> PerformanceReport:
+        """Compute and return the full performance report."""
         avg_hold = (
             sum(self._trade_holding_times) / len(self._trade_holding_times)
             if self._trade_holding_times else 60.0
@@ -201,6 +207,7 @@ class PortfolioEngine:
         )
 
     def summary(self) -> dict:
+        """Return a flat dict of all key performance metrics."""
         p = self.performance()
         return {
             "equity": round(self._equity, 4),
@@ -218,6 +225,7 @@ class PortfolioEngine:
     def _open_position(
         self, signal: TradeSignal, entry_price: float, sizing: SizingResult
     ) -> Position:
+        """Create a Position object from signal and sizing result."""
         pos_id = hashlib.sha256(
             f"{signal.signal_id}{entry_price}".encode()
         ).hexdigest()[:12]
@@ -240,11 +248,13 @@ class PortfolioEngine:
         )
 
     def _apply_slippage(self, price: float) -> float:
+        """Apply configured slippage to *price*."""
         return price * (1 + self._pc.slippage_rate)
 
     def _check_exit(
         self, pos: Position, current_price: float, current_time: datetime
     ) -> Optional[CloseReason]:
+        """Return a CloseReason if *pos* should be closed, else None."""
         if pos.should_stop_loss(current_price):
             return CloseReason.STOP_LOSS
         if pos.should_take_profit(current_price):
@@ -264,6 +274,7 @@ class PortfolioEngine:
         return None
 
     def _get_signal_config(self, domain: str):
+        """Look up the SignalConfig for *domain*, or None if not configured."""
         for sc in self._config.signals:
             if sc.domain == domain:
                 return sc

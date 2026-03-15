@@ -67,6 +67,7 @@ class Database:
         self._engine.dispose()
 
     def save_event(self, event: NewsEvent, run_id: str) -> None:
+        """Persist a NewsEvent to the database (idempotent — skips duplicates)."""
         with self._Session() as session:
             existing = session.query(EventRecord).filter_by(
                 event_id=event.event_id
@@ -98,6 +99,7 @@ class Database:
         domain: Optional[str] = None,
         limit: int = 1000,
     ) -> list[dict]:
+        """Query stored events, optionally filtered by run_id and domain."""
         with self._Session() as session:
             q = session.query(EventRecord)
             if run_id:
@@ -113,6 +115,7 @@ class Database:
     # ------------------------------------------------------------------
 
     def save_trade(self, position: Position, run_id: str) -> None:
+        """Persist or update a Position as a TradeRecord in the database."""
         with self._Session() as session:
             existing = session.query(TradeRecord).filter_by(
                 position_id=position.position_id
@@ -155,6 +158,7 @@ class Database:
     def get_trades(
         self, run_id: Optional[str] = None, limit: int = 500
     ) -> list[dict]:
+        """Query stored trades, optionally filtered by run_id."""
         with self._Session() as session:
             q = session.query(TradeRecord)
             if run_id:
@@ -175,6 +179,7 @@ class Database:
         initial_capital: float,
         config_snapshot: dict,
     ) -> None:
+        """Insert a new run record at the start of a simulation or paper session."""
         with self._Session() as session:
             record = RunRecord(
                 run_id=run_id,
@@ -197,6 +202,7 @@ class Database:
         sharpe: Optional[float],
         max_dd: Optional[float],
     ) -> None:
+        """Finalise a run record with end-of-run performance metrics."""
         with self._Session() as session:
             record = session.query(RunRecord).filter_by(run_id=run_id).first()
             if record:
@@ -209,6 +215,7 @@ class Database:
                 session.commit()
 
     def get_runs(self, limit: int = 50) -> list[dict]:
+        """Return recent runs sorted by start time descending."""
         with self._Session() as session:
             rows = (
                 session.query(RunRecord)
@@ -223,6 +230,7 @@ class Database:
     # ------------------------------------------------------------------
 
     def save_walkforward_result(self, run_id: str, window: dict) -> None:
+        """Persist a single walk-forward window result."""
         oos = window.get("oos", {})
         is_ = window.get("in_sample", {})
         bp = window.get("best_params", {})
@@ -250,6 +258,7 @@ class Database:
     # ------------------------------------------------------------------
 
     def save_grid_result(self, run_id: str, params: dict, metrics: dict) -> None:
+        """Persist a single grid search parameter combination result."""
         with self._Session() as session:
             record = GridResult(
                 run_id=run_id,
@@ -270,6 +279,7 @@ class Database:
     # ------------------------------------------------------------------
 
     def execute_raw(self, sql: str) -> list[dict]:
+        """Execute a raw SQL query and return results as a list of dicts."""
         with self._engine.connect() as conn:
             result = conn.execute(text(sql))
             cols = list(result.keys())
@@ -281,6 +291,7 @@ class Database:
 
     @staticmethod
     def _event_to_dict(r: EventRecord) -> dict:
+        """Serialise an EventRecord ORM object to a plain dict."""
         return {
             "event_id": r.event_id,
             "run_id": r.run_id,
@@ -295,6 +306,7 @@ class Database:
 
     @staticmethod
     def _trade_to_dict(r: TradeRecord) -> dict:
+        """Serialise a TradeRecord ORM object to a plain dict."""
         return {
             "position_id": r.position_id,
             "run_id": r.run_id,
@@ -314,6 +326,7 @@ class Database:
 
     @staticmethod
     def _run_to_dict(r: RunRecord) -> dict:
+        """Serialise a RunRecord ORM object to a plain dict."""
         return {
             "run_id": r.run_id,
             "run_name": r.run_name,

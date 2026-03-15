@@ -135,6 +135,7 @@ class KeywordClassifier:
         self._ai_kws = _AI_RELEASES_KEYWORDS
 
     def classify(self, event: NewsEvent) -> ClassificationResult:
+        """Classify *event* into a domain with confidence, sentiment, and importance."""
         text = (event.headline + " " + event.summary).lower()
 
         energy_score, energy_matches, e_sent, e_imp = self._score(text, self._energy_kws)
@@ -171,6 +172,10 @@ class KeywordClassifier:
     def _score(
         self, text: str, keywords: list[tuple[str, float, float, float]]
     ) -> tuple[float, list[str], float, float]:
+        """Score *text* against a keyword list.
+
+        Returns (weight, matches, sentiment, importance).
+        """
         total_weight = 0.0
         total_sentiment = 0.0
         total_importance = 0.0

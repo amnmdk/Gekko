@@ -110,6 +110,7 @@ class RSSFeed(BaseFeed):
         return None
 
     def _entry_to_event(self, entry: feedparser.FeedParserDict) -> Optional[NewsEvent]:
+        """Convert a feedparser entry into a NewsEvent, or None if unparsable."""
         headline = getattr(entry, "title", "").strip()
         if not headline:
             return None
@@ -125,13 +126,13 @@ class RSSFeed(BaseFeed):
         if hasattr(entry, "published_parsed") and entry.published_parsed:
             try:
                 published_at = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
-            except Exception:
-                pass
+            except (TypeError, ValueError, OverflowError):
+                logger.debug("Could not parse published date for entry in %s", self.name)
         elif hasattr(entry, "updated_parsed") and entry.updated_parsed:
             try:
                 published_at = datetime(*entry.updated_parsed[:6], tzinfo=timezone.utc)
-            except Exception:
-                pass
+            except (TypeError, ValueError, OverflowError):
+                logger.debug("Could not parse updated date for entry in %s", self.name)
 
         tags = [tag.get("term", "") for tag in getattr(entry, "tags", [])]
 

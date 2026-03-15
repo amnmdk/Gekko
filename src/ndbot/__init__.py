@@ -14,5 +14,5 @@ Domains:
   AI_RELEASES — OpenAI, Anthropic, major AI lab announcements
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __author__ = "ndbot contributors"

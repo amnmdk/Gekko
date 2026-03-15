@@ -13,12 +13,14 @@ _state: AppState | None = None
 
 
 def init_ws(state: AppState) -> None:
+    """Bind the shared AppState so the WebSocket handler can access it."""
     global _state
     _state = state
 
 
 @ws_router.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_endpoint(websocket: WebSocket) -> None:
+    """Handle a single WebSocket client: send snapshot then keep-alive loop."""
     await websocket.accept()
     if _state is None:
         await websocket.close(code=1011)
@@ -49,7 +51,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
     except WebSocketDisconnect:
         logger.info("WS client disconnected")
-    except Exception as exc:
-        logger.warning("WS error: %s", exc)
+    except (ConnectionError, RuntimeError) as exc:
+        logger.warning("WS connection error: %s", exc)
     finally:
         _state.remove_ws_client(websocket)

@@ -92,6 +92,7 @@ class EnergyGeoSignalGenerator:
         return signal
 
     def _determine_direction(self, event: NewsEvent) -> SignalDirection:
+        """Determine LONG/SHORT/FLAT from keyword hits and sentiment."""
         text = (event.headline + " " + event.summary).lower()
         bearish_hits = sum(1 for kw in self._BEARISH_KEYWORDS if kw in text)
         bullish_hits = sum(1 for kw in self._BULLISH_KEYWORDS if kw in text)

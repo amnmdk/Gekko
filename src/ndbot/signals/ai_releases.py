@@ -53,6 +53,7 @@ class AIReleasesSignalGenerator:
         self._sig_cfg = signal_config
 
     def generate(self, event: NewsEvent, confidence: float) -> TradeSignal | None:
+        """Generate a trade signal from *event* if confidence threshold met."""
         if event.domain != self.DOMAIN:
             return None
         if confidence < self._sig_cfg.min_confidence:
@@ -96,6 +97,7 @@ class AIReleasesSignalGenerator:
         return signal
 
     def _determine_direction(self, event: NewsEvent) -> SignalDirection:
+        """Determine LONG/SHORT/FLAT from keyword hits and sentiment."""
         text = (event.headline + " " + event.summary).lower()
         bullish_hits = sum(1 for kw in self._BULLISH_KEYWORDS if kw in text)
         bearish_hits = sum(1 for kw in self._BEARISH_KEYWORDS if kw in text)
@@ -107,6 +109,7 @@ class AIReleasesSignalGenerator:
         return SignalDirection.FLAT
 
     def _apply_tier_boost(self, event: NewsEvent, confidence: float) -> float:
+        """Boost confidence by 15% if event mentions a top-tier AI lab."""
         text = (event.headline + " " + event.summary).lower()
         for lab in self._TOP_TIER_LABS:
             if lab in text:

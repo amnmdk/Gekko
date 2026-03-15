@@ -36,6 +36,7 @@ class FeedManager:
         self._build_feeds()
 
     def _build_feeds(self) -> None:
+        """Instantiate RSS feeds from config and register them."""
         for fc in self._config.feeds:
             if not fc.enabled:
                 continue
@@ -84,7 +85,7 @@ class FeedManager:
                     await self._dispatch(ev)
             except asyncio.CancelledError:
                 raise
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — must not crash poll loop
                 logger.error("Feed %s poll error: %s", feed.name, exc)
             await asyncio.sleep(interval)
 
@@ -94,8 +95,8 @@ class FeedManager:
         for handler in self._handlers:
             try:
                 await handler(event)
-            except Exception as exc:
-                logger.error("Handler error: %s", exc)
+            except Exception as exc:  # noqa: BLE001 — handler must not crash dispatch
+                logger.error("Handler error for %s: %s", type(handler).__name__, exc)
 
     async def poll_once(self) -> list[NewsEvent]:
         """Poll all feeds exactly once and return collected events (no dispatch)."""
@@ -104,6 +105,6 @@ class FeedManager:
             try:
                 events = await feed.poll()
                 all_events.extend(events)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — one feed failure must not block others
                 logger.error("Feed %s one-shot poll error: %s", feed.name, exc)
         return all_events

@@ -156,17 +156,20 @@ class AppState:
     # WebSocket broadcast
     # ------------------------------------------------------------------
 
-    async def broadcast(self, msg: dict) -> None:
+    async def broadcast(self, msg: dict[str, object]) -> None:
+        """Send *msg* to all connected WebSocket clients; remove dead sockets."""
         dead: set = set()
         for ws in list(self._ws_clients):
             try:
                 await ws.send_json(msg)
-            except Exception:
+            except (ConnectionError, RuntimeError):
                 dead.add(ws)
         self._ws_clients -= dead
 
-    def add_ws_client(self, ws) -> None:
+    def add_ws_client(self, ws: object) -> None:
+        """Register a new WebSocket client for broadcast updates."""
         self._ws_clients.add(ws)
 
-    def remove_ws_client(self, ws) -> None:
+    def remove_ws_client(self, ws: object) -> None:
+        """Unregister a WebSocket client (safe if not present)."""
         self._ws_clients.discard(ws)

@@ -858,6 +858,147 @@ def validate_config(config: str, check_feeds: bool):
 # Helpers
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# monte-carlo
+# ---------------------------------------------------------------------------
+
+@main.command("monte-carlo")
+@click.option("--config", "-c", required=True, type=click.Path(exists=True))
+@click.option("--n-sims", default=1000, show_default=True,
+              help="Number of Monte Carlo simulations")
+@click.option("--n-events", default=100, show_default=True)
+@click.option("--seed", default=42, show_default=True)
+@click.option("--output-dir", default="results", show_default=True)
+@click.option("--log-level", default="INFO", show_default=True)
+def monte_carlo(
+    config: str, n_sims: int, n_events: int,
+    seed: int, output_dir: str, log_level: str,
+):
+    """Run Monte Carlo robustness testing on strategy."""
+    _setup_logging(log_level)
+    cfg = _load_config_or_exit(config)
+
+    from .execution.simulate import SimulationEngine
+    from .research.monte_carlo import MonteCarloEngine
+
+    db = Database(cfg.storage.db_path)
+    db.init()
+
+    console.print(Panel(
+        f"[bold cyan]ndbot MONTE CARLO[/bold cyan]\n"
+        f"Simulations: {n_sims} | Events: {n_events} | Seed: {seed}",
+        title="ndbot", border_style="red"
+    ))
+
+    # Run base simulation to get trade PnLs
+    console.print("[cyan]Running base simulation...[/cyan]")
+    engine = SimulationEngine(cfg, db, n_events=n_events, n_candles=500, seed=seed)
+    engine.run()
+
+    # Get trade PnLs from portfolio
+    trades = db.get_trades(limit=10000)
+    trade_pnls = [
+        t.get("realised_pnl", 0.0) or 0.0
+        for t in trades if t.get("realised_pnl") is not None
+    ]
+
+    if len(trade_pnls) < 3:
+        console.print("[yellow]Insufficient trades for Monte Carlo analysis[/yellow]")
+        return
+
+    mc = MonteCarloEngine(n_simulations=n_sims, seed=seed)
+
+    # Bootstrap test
+    console.print(f"[cyan]Running {n_sims} bootstrap simulations...[/cyan]")
+    bootstrap = mc.run_bootstrap(
+        trade_pnls, cfg.portfolio.initial_capital,
+    )
+
+    # Noise injection test
+    console.print(f"[cyan]Running {n_sims} noise injection simulations...[/cyan]")
+    noise = mc.run_noise_injection(
+        trade_pnls, cfg.portfolio.initial_capital,
+    )
+
+    # Display results
+    from rich.table import Table
+    table = Table(title="Monte Carlo Robustness Results", show_header=True, header_style="bold red")
+    table.add_column("Metric", width=30)
+    table.add_column("Bootstrap", width=18, justify="right")
+    table.add_column("Noise Injection", width=18, justify="right")
+
+    rows = [
+        ("Sharpe (mean)", f"{bootstrap.sharpe_mean:.4f}", f"{noise.sharpe_mean:.4f}"),
+        ("Sharpe (5th pct)", f"{bootstrap.sharpe_5th:.4f}", f"{noise.sharpe_5th:.4f}"),
+        ("Sharpe (95th pct)", f"{bootstrap.sharpe_95th:.4f}", f"{noise.sharpe_95th:.4f}"),
+        ("Return % (mean)", f"{bootstrap.return_mean_pct:.4f}", f"{noise.return_mean_pct:.4f}"),
+        ("Return % (5th pct)", f"{bootstrap.return_5th_pct:.4f}", f"{noise.return_5th_pct:.4f}"),
+        ("Max DD % (95th)", f"{bootstrap.max_dd_95th_pct:.4f}", f"{noise.max_dd_95th_pct:.4f}"),
+        ("Risk of Ruin (25%)", f"{bootstrap.prob_ruin_25:.4f}", f"{noise.prob_ruin_25:.4f}"),
+        ("Risk of Ruin (50%)", f"{bootstrap.prob_ruin_50:.4f}", f"{noise.prob_ruin_50:.4f}"),
+        ("p-value (Sharpe)", f"{bootstrap.p_value_sharpe:.4f}", f"{noise.p_value_sharpe:.4f}"),
+        ("Original Sharpe", f"{bootstrap.original_sharpe:.4f}", f"{noise.original_sharpe:.4f}"),
+    ]
+    for metric, bs, ni in rows:
+        table.add_row(metric, bs, ni)
+
+    console.print(table)
+
+    # Save reports
+    mc.save_report(bootstrap, output_dir, f"{cfg.run_name}_bootstrap")
+    mc.save_report(noise, output_dir, f"{cfg.run_name}_noise")
+    console.print(f"\n[dim]Reports saved to: {output_dir}/[/dim]")
+
+
+# ---------------------------------------------------------------------------
+# health
+# ---------------------------------------------------------------------------
+
+@main.command()
+@click.option("--db", default="data/ndbot.db", show_default=True)
+def health(db: str):
+    """Show system health and monitoring status."""
+    from .monitoring import SystemMonitor
+
+    monitor = SystemMonitor()
+
+    console.print(Panel(
+        "[bold cyan]ndbot SYSTEM HEALTH[/bold cyan]",
+        title="ndbot", border_style="green"
+    ))
+
+    health_status = monitor.get_health()
+    status_style = {
+        "healthy": "green",
+        "degraded": "yellow",
+        "critical": "red",
+    }.get(health_status.overall, "dim")
+
+    console.print(f"  Status:  [{status_style}]{health_status.overall.upper()}[/{status_style}]")
+    console.print(f"  Uptime:  {health_status.uptime_seconds:.0f}s")
+
+    if Path(db).exists():
+        database = Database(db)
+        database.init()
+        runs = database.get_runs(limit=5)
+        if runs:
+            console.print(f"\n  Recent runs: {len(runs)}")
+            for r in runs[:3]:
+                pnl = r.get("total_pnl") or 0.0
+                pnl_style = "green" if pnl >= 0 else "red"
+                console.print(
+                    f"    {r.get('run_name', ''):<20} "
+                    f"[{pnl_style}]PnL={pnl:+.4f}[/{pnl_style}]  "
+                    f"trades={r.get('total_trades', 0)}"
+                )
+    else:
+        console.print(f"\n  [dim]No database found at {db}[/dim]")
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
 def _load_config_or_exit(path: str) -> BotConfig:
     try:
         return load_config(path)

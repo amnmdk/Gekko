@@ -181,7 +181,7 @@ class PaperEngine:
                 "TESTNET ORDER SUBMITTED: %s | order_id=%s",
                 position.position_id, order.get("id", "?"),
             )
-        except Exception as exc:
+        except (ConnectionError, TimeoutError, RuntimeError) as exc:
             logger.error("Order submission failed: %s", exc)
 
     async def _candle_loop(self) -> None:
@@ -204,6 +204,7 @@ class PaperEngine:
                     await self._close_exchange_position(pos)
 
     async def _close_exchange_position(self, position: Position) -> None:
+        """Submit a closing order to the exchange for *position*."""
         if self._market._exchange is None:
             return
         try:
@@ -212,10 +213,11 @@ class PaperEngine:
                 position.symbol, side, position.size
             )
             logger.info("Exchange close order for position %s", position.position_id)
-        except Exception as exc:
+        except (ConnectionError, TimeoutError, RuntimeError) as exc:
             logger.error("Close order failed for %s: %s", position.position_id, exc)
 
     async def _shutdown(self) -> dict:
+        """Gracefully shut down the engine: save trades, close exchange, return summary."""
         self._running = False
         for pos in self._portfolio.open_positions:
             self._db.save_trade(pos, self._run_id)
@@ -260,6 +262,7 @@ class PaperEngine:
         )
 
     def _print_banner(self) -> None:
+        """Print the safety banner showing DRY_RUN and SANDBOX status."""
         cfg = self._config.paper
         print(_PAPER_BANNER.format(
             dry_run=str(cfg.dry_run),
@@ -269,6 +272,7 @@ class PaperEngine:
         ))
 
     def _make_run_id(self) -> str:
+        """Generate a deterministic short run ID from config name and timestamp."""
         ts = datetime.now(timezone.utc).isoformat()
         return hashlib.sha256(
             f"paper_{self._config.run_name}{ts}".encode()

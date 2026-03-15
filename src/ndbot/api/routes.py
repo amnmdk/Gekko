@@ -24,12 +24,14 @@ def _get_state() -> AppState:
 
 
 @router.get("/status")
-async def get_status():
+async def get_status() -> dict[str, Any]:
+    """Return full system status including balance, PnL, and runtime config."""
     return _get_state().summary()
 
 
 @router.get("/balance")
-async def get_balance():
+async def get_balance() -> dict[str, Any]:
+    """Return current balance, PnL, peak equity, and drawdown percentage."""
     s = _get_state()
     return {
         "balance": round(s.balance, 2),
@@ -43,25 +45,29 @@ async def get_balance():
 
 
 @router.get("/events")
-async def get_events(limit: int = Query(default=50, ge=1, le=200)):
+async def get_events(limit: int = Query(default=50, ge=1, le=200)) -> list[dict]:
+    """Return the most recent news events (newest first)."""
     s = _get_state()
     return [e.to_dict() for e in s.events[:limit]]
 
 
 @router.get("/positions")
-async def get_positions():
+async def get_positions() -> list[dict]:
+    """Return all currently open positions."""
     s = _get_state()
     return [p.to_dict() for p in s.open_positions.values()]
 
 
 @router.get("/trades")
-async def get_trades(limit: int = Query(default=100, ge=1, le=500)):
+async def get_trades(limit: int = Query(default=100, ge=1, le=500)) -> list[dict]:
+    """Return closed trade history (most recent first)."""
     s = _get_state()
     return [t.to_dict() for t in s.trades[:limit]]
 
 
 @router.get("/metrics")
-async def get_metrics():
+async def get_metrics() -> dict[str, Any]:
+    """Return detailed performance metrics (gross P/L, win/loss, profit factor)."""
     s = _get_state()
     closed = s.trades
     if not closed:
