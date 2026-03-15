@@ -26,6 +26,10 @@ if not defined NDBOT_CONFIG set NDBOT_CONFIG=config\sample.yaml
 if not defined NDBOT_LOG_LEVEL set NDBOT_LOG_LEVEL=INFO
 if not defined NDBOT_SEED set NDBOT_SEED=42
 
+REM --- Detect if launched by double-click (no parent console) ---
+set "INTERACTIVE=0"
+if "%~1"=="" set "INTERACTIVE=1"
+
 REM --- Find Python ---
 set PYTHON=
 where python >nul 2>&1 && set PYTHON=python
@@ -34,7 +38,7 @@ if not defined PYTHON (
 )
 if not defined PYTHON (
     echo [ERROR] Python not found. Install Python 3.10+ first.
-    exit /b 1
+    goto :pause_and_exit
 )
 
 REM --- Route command ---
@@ -90,6 +94,10 @@ exit /b 1
 if not exist ".venv" (
     echo Creating virtual environment...
     %PYTHON% -m venv .venv
+    if errorlevel 1 (
+        echo [ERROR] Failed to create virtual environment.
+        goto :pause_and_exit
+    )
 )
 if exist ".venv\Scripts\activate.bat" (
     call .venv\Scripts\activate.bat
@@ -101,6 +109,10 @@ goto :eof
 if errorlevel 1 (
     echo Installing ndbot...
     pip install -e ".[dev]" --quiet
+    if errorlevel 1 (
+        echo [ERROR] pip install failed. See errors above.
+        goto :pause_and_exit
+    )
 )
 goto :eof
 
@@ -108,15 +120,19 @@ goto :eof
 call :ensure_venv
 echo Installing all dependencies...
 pip install -e ".[dev]"
+if errorlevel 1 (
+    echo [ERROR] Installation failed. See errors above.
+    goto :pause_and_exit
+)
 echo Installation complete.
-goto :eof
+goto :done
 
 :test
 call :ensure_venv
 call :ensure_installed
 echo Running test suite...
 %PYTHON% -m pytest tests/ -v --tb=short
-goto :eof
+goto :done
 
 :run_command
 if not defined CMD set CMD=%~1
@@ -124,37 +140,37 @@ call :ensure_venv
 call :ensure_installed
 
 if /i "%CMD%"=="simulate" (
-    %PYTHON% -m ndbot.cli simulate -c "%NDBOT_CONFIG%" --seed %NDBOT_SEED% --log-level %NDBOT_LOG_LEVEL%
+    ndbot simulate -c "%NDBOT_CONFIG%" --seed %NDBOT_SEED% --log-level %NDBOT_LOG_LEVEL%
 ) else if /i "%CMD%"=="backtest" (
-    %PYTHON% -m ndbot.cli backtest -c "%NDBOT_CONFIG%" --seed %NDBOT_SEED% --log-level %NDBOT_LOG_LEVEL%
+    ndbot backtest -c "%NDBOT_CONFIG%" --seed %NDBOT_SEED% --log-level %NDBOT_LOG_LEVEL%
 ) else if /i "%CMD%"=="event-study" (
-    %PYTHON% -m ndbot.cli event-study -c "%NDBOT_CONFIG%" --seed %NDBOT_SEED% --log-level %NDBOT_LOG_LEVEL%
+    ndbot event-study -c "%NDBOT_CONFIG%" --seed %NDBOT_SEED% --log-level %NDBOT_LOG_LEVEL%
 ) else if /i "%CMD%"=="walkforward" (
-    %PYTHON% -m ndbot.cli walkforward -c "%NDBOT_CONFIG%" --seed %NDBOT_SEED% --log-level %NDBOT_LOG_LEVEL%
+    ndbot walkforward -c "%NDBOT_CONFIG%" --seed %NDBOT_SEED% --log-level %NDBOT_LOG_LEVEL%
 ) else if /i "%CMD%"=="grid" (
-    %PYTHON% -m ndbot.cli grid -c "%NDBOT_CONFIG%" --seed %NDBOT_SEED% --log-level %NDBOT_LOG_LEVEL%
+    ndbot grid -c "%NDBOT_CONFIG%" --seed %NDBOT_SEED% --log-level %NDBOT_LOG_LEVEL%
 ) else if /i "%CMD%"=="monte-carlo" (
-    %PYTHON% -m ndbot.cli monte-carlo -c "%NDBOT_CONFIG%" --seed %NDBOT_SEED% --log-level %NDBOT_LOG_LEVEL%
+    ndbot monte-carlo -c "%NDBOT_CONFIG%" --seed %NDBOT_SEED% --log-level %NDBOT_LOG_LEVEL%
 ) else if /i "%CMD%"=="paper" (
-    %PYTHON% -m ndbot.cli paper -c "%NDBOT_CONFIG%" --log-level %NDBOT_LOG_LEVEL%
+    ndbot paper -c "%NDBOT_CONFIG%" --log-level %NDBOT_LOG_LEVEL%
 ) else if /i "%CMD%"=="seed-demo" (
-    %PYTHON% -m ndbot.cli seed-demo --seed %NDBOT_SEED%
+    ndbot seed-demo --seed %NDBOT_SEED%
 ) else if /i "%CMD%"=="status" (
-    %PYTHON% -m ndbot.cli status
+    ndbot status
 ) else if /i "%CMD%"=="health" (
-    %PYTHON% -m ndbot.cli health
+    ndbot health
 ) else if /i "%CMD%"=="dashboard" (
     echo Starting web dashboard on http://localhost:8000 ...
     %PYTHON% -m uvicorn ndbot.api.app:create_app --host 0.0.0.0 --port 8000 --factory
 ) else if /i "%CMD%"=="validate-config" (
-    %PYTHON% -m ndbot.cli validate-config -c "%NDBOT_CONFIG%"
+    ndbot validate-config -c "%NDBOT_CONFIG%"
 ) else if /i "%CMD%"=="export" (
-    %PYTHON% -m ndbot.cli export %2 %3 %4 %5
+    ndbot export %2 %3 %4 %5
 ) else (
     echo [ERROR] Unknown command: %CMD%
     goto :help
 )
-goto :eof
+goto :done
 
 :help
 echo.
@@ -179,4 +195,13 @@ echo Environment variables:
 echo   NDBOT_CONFIG     Config file path (default: config\sample.yaml)
 echo   NDBOT_LOG_LEVEL  Log level (default: INFO)
 echo   NDBOT_SEED       Random seed (default: 42)
-goto :eof
+goto :done
+
+:pause_and_exit
+echo.
+pause
+exit /b 1
+
+:done
+echo.
+if "%INTERACTIVE%"=="1" pause

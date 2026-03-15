@@ -115,44 +115,44 @@ do_command() {
 
     case "$cmd" in
         simulate)
-            $PYTHON -m ndbot.cli simulate -c "$CONFIG" --seed "$SEED" --log-level "$LOG_LEVEL" "$@"
+            ndbot simulate -c "$CONFIG" --seed "$SEED" --log-level "$LOG_LEVEL" "$@"
             ;;
         backtest)
-            $PYTHON -m ndbot.cli backtest -c "$CONFIG" --seed "$SEED" --log-level "$LOG_LEVEL" "$@"
+            ndbot backtest -c "$CONFIG" --seed "$SEED" --log-level "$LOG_LEVEL" "$@"
             ;;
         event-study)
-            $PYTHON -m ndbot.cli event-study -c "$CONFIG" --seed "$SEED" --log-level "$LOG_LEVEL" "$@"
+            ndbot event-study -c "$CONFIG" --seed "$SEED" --log-level "$LOG_LEVEL" "$@"
             ;;
         walkforward)
-            $PYTHON -m ndbot.cli walkforward -c "$CONFIG" --seed "$SEED" --log-level "$LOG_LEVEL" "$@"
+            ndbot walkforward -c "$CONFIG" --seed "$SEED" --log-level "$LOG_LEVEL" "$@"
             ;;
         grid)
-            $PYTHON -m ndbot.cli grid -c "$CONFIG" --seed "$SEED" --log-level "$LOG_LEVEL" "$@"
+            ndbot grid -c "$CONFIG" --seed "$SEED" --log-level "$LOG_LEVEL" "$@"
             ;;
         monte-carlo)
-            $PYTHON -m ndbot.cli monte-carlo -c "$CONFIG" --seed "$SEED" --log-level "$LOG_LEVEL" "$@"
+            ndbot monte-carlo -c "$CONFIG" --seed "$SEED" --log-level "$LOG_LEVEL" "$@"
             ;;
         paper)
-            $PYTHON -m ndbot.cli paper -c "$CONFIG" --log-level "$LOG_LEVEL" "$@"
+            ndbot paper -c "$CONFIG" --log-level "$LOG_LEVEL" "$@"
             ;;
         seed-demo)
-            $PYTHON -m ndbot.cli seed-demo --seed "$SEED" "$@"
+            ndbot seed-demo --seed "$SEED" "$@"
             ;;
         status)
-            $PYTHON -m ndbot.cli status "$@"
+            ndbot status "$@"
             ;;
         health)
-            $PYTHON -m ndbot.cli health "$@"
+            ndbot health "$@"
             ;;
         dashboard)
             echo -e "${CYAN}Starting web dashboard on http://localhost:8000 ...${NC}"
             $PYTHON -m uvicorn ndbot.api.app:create_app --host 0.0.0.0 --port 8000 --factory "$@"
             ;;
         validate-config)
-            $PYTHON -m ndbot.cli validate-config -c "$CONFIG" "$@"
+            ndbot validate-config -c "$CONFIG" "$@"
             ;;
         export)
-            $PYTHON -m ndbot.cli export "$@"
+            ndbot export "$@"
             ;;
         *)
             echo -e "${RED}Unknown command: $cmd${NC}"
