@@ -1,0 +1,126 @@
+version: "3.9"
+
+# ============================================================
+# ndbot — Docker Compose
+# ARM64 compatible (Raspberry Pi 5 / Apple M-series)
+#
+# QUICK START:
+#   docker compose up --build
+#   Then open http://localhost  (or http://<pi-ip> on your LAN)
+#
+# Pi deployment:
+#   git clone https://github.com/amnmdk/Gekko.git && cd Gekko
+#   docker compose up -d --build
+# ============================================================
+
+services:
+
+  # ── Trading API backend (FastAPI + uvicorn) ──────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    image: ndbot-backend:latest
+    container_name: ndbot-backend
+    restart: unless-stopped
+    environment:
+      - NDBOT__PORTFOLIO__INITIAL_CAPITAL=500
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ndbot-data:/app/data
+      - ndbot-results:/app/results
+      - ndbot-logs:/app/logs
+    expose:
+      - "8000"
+    networks:
+      - ndbot-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ── Web dashboard (Nginx serving Leaflet.js UI) ──────────
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    image: ndbot-frontend:latest
+    container_name: ndbot-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - ndbot-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ── CLI tools (run one-off research commands) ─────────────
+  # Usage:  docker compose run --rm cli simulate --seed 42
+  cli:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ndbot-cli:latest
+    container_name: ndbot-cli
+    volumes:
+      - ndbot-data:/app/data
+      - ndbot-results:/app/results
+      - ./config:/app/config:ro
+    environment:
+      - NDBOT__PORTFOLIO__INITIAL_CAPITAL=500
+    networks:
+      - ndbot-net
+    profiles:
+      - cli
+
+  # ── One-shot research jobs (use --profile research) ──────
+  simulate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ndbot-cli:latest
+    command: ["simulate", "--config", "/app/config/sample.yaml", "--seed", "42"]
+    volumes:
+      - ndbot-data:/app/data
+      - ndbot-results:/app/results
+      - ./config:/app/config:ro
+    environment:
+      - NDBOT__PORTFOLIO__INITIAL_CAPITAL=500
+    networks:
+      - ndbot-net
+    profiles:
+      - research
+
+  walkforward:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ndbot-cli:latest
+    command: ["walkforward", "--config", "/app/config/sample.yaml", "--output-dir", "/app/results"]
+    volumes:
+      - ndbot-data:/app/data
+      - ndbot-results:/app/results
+      - ./config:/app/config:ro
+    networks:
+      - ndbot-net
+    profiles:
+      - research
+
+# ── Named volumes ────────────────────────────────────────────
+volumes:
+  ndbot-data:    { driver: local }
+  ndbot-results: { driver: local }
+  ndbot-logs:    { driver: local }
+
+# ── Internal network ─────────────────────────────────────────
+networks:
+  ndbot-net:
+    driver: bridge

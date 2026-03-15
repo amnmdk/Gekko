@@ -1,0 +1,70 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+
+# Data and results (large files)
+data/*.db
+data/*.csv
+results/*.png
+results/*.json
+results/*.csv
+# Keep the gitkeep placeholders
+!data/.gitkeep
+!results/.gitkeep
+
+# Secrets — NEVER commit these
+config/secrets.yaml
+.env.local
+*.secret
+
+# OS
+.DS_Store
+Thumbs.db
+
+# SQLite temporary files
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Claude Code
+.claude/
+
+# pytest
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# mypy
+.mypy_cache/
+
+# ruff
+.ruff_cache/
+
+# Docker
+.dockerignore
