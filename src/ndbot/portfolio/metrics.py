@@ -1,7 +1,7 @@
 """
 Portfolio performance metrics calculator.
 
-Computes:
+Computes (institutional-grade):
   - Total return %
   - Sharpe Ratio (annualised)
   - Sortino Ratio
@@ -11,6 +11,9 @@ Computes:
   - Win Rate %
   - Average Win / Average Loss
   - Calmar Ratio
+  - Risk of Ruin (analytical estimate)
+  - Payoff Ratio
+  - Recovery Factor
 """
 from __future__ import annotations
 
@@ -37,6 +40,9 @@ class PerformanceReport:
     sortino_ratio: float
     calmar_ratio: float
     annualised_return_pct: float
+    risk_of_ruin: float = 0.0
+    payoff_ratio: float = 0.0
+    recovery_factor: float = 0.0
 
     def to_dict(self) -> dict:
         return {
@@ -55,6 +61,9 @@ class PerformanceReport:
             "sortino_ratio": round(self.sortino_ratio, 4),
             "calmar_ratio": round(self.calmar_ratio, 4),
             "annualised_return_pct": round(self.annualised_return_pct, 4),
+            "risk_of_ruin": round(self.risk_of_ruin, 6),
+            "payoff_ratio": round(self.payoff_ratio, 4),
+            "recovery_factor": round(self.recovery_factor, 4),
         }
 
 
@@ -93,7 +102,8 @@ class PortfolioMetrics:
                 avg_win=0.0, avg_loss=0.0, profit_factor=0.0,
                 expectancy=0.0, max_drawdown_pct=0.0,
                 sharpe_ratio=0.0, sortino_ratio=0.0, calmar_ratio=0.0,
-                annualised_return_pct=0.0,
+                annualised_return_pct=0.0, risk_of_ruin=0.0,
+                payoff_ratio=0.0, recovery_factor=0.0,
             )
 
         wins = [p for p in closed_pnls if p > 0]
@@ -116,11 +126,26 @@ class PortfolioMetrics:
 
         expectancy = (win_rate * avg_win) + ((1 - win_rate) * avg_loss)
 
+        # Payoff ratio (avg win / avg loss magnitude)
+        payoff_ratio = avg_win / abs(avg_loss) if avg_loss != 0 else float("inf")
+
         # --- Drawdown ---
         eq = np.array(equity_curve if equity_curve else [initial_capital])
         rolling_max = np.maximum.accumulate(eq)
-        drawdowns = (rolling_max - eq) / rolling_max
+        drawdowns = (rolling_max - eq) / np.maximum(rolling_max, 1e-10)
         max_drawdown_pct = float(np.max(drawdowns)) * 100 if len(drawdowns) > 0 else 0.0
+
+        # Recovery factor: total return / max drawdown
+        recovery_factor = (
+            abs(total_return_pct / max_drawdown_pct)
+            if max_drawdown_pct > 0 else 0.0
+        )
+
+        # --- Risk of Ruin (analytical approximation) ---
+        # RoR = ((1 - edge) / (1 + edge)) ^ capital_units
+        risk_of_ruin = PortfolioMetrics._compute_risk_of_ruin(
+            win_rate, avg_win, abs(avg_loss) if avg_loss != 0 else 1.0
+        )
 
         # --- Returns series ---
         pnl_arr = np.array(closed_pnls)
@@ -173,4 +198,37 @@ class PortfolioMetrics:
             sortino_ratio=sortino,
             calmar_ratio=calmar,
             annualised_return_pct=ann_return_pct,
+            risk_of_ruin=risk_of_ruin,
+            payoff_ratio=payoff_ratio,
+            recovery_factor=recovery_factor,
         )
+
+    @staticmethod
+    def _compute_risk_of_ruin(
+        win_rate: float, avg_win: float, avg_loss_abs: float,
+        capital_units: int = 20,
+    ) -> float:
+        """
+        Analytical risk of ruin estimate.
+
+        Uses the simplified formula:
+          edge = win_rate * (avg_win/avg_loss) - (1 - win_rate)
+          RoR = ((1 - edge) / (1 + edge)) ^ capital_units
+
+        capital_units: number of "risk units" of capital (e.g., 20 means
+        you can lose 20 consecutive max-risk trades before ruin).
+        """
+        if avg_loss_abs <= 0 or win_rate <= 0:
+            return 1.0
+
+        payoff = avg_win / avg_loss_abs
+        edge = win_rate * payoff - (1 - win_rate)
+
+        if edge <= 0:
+            return 1.0  # Negative expectancy → certain ruin eventually
+
+        ratio = (1 - edge) / (1 + edge)
+        if ratio >= 1.0:
+            return 1.0
+
+        return float(ratio ** capital_units)

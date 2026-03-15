@@ -226,6 +226,8 @@ class EventStudy:
     def _aggregate(self, windows: list[dict]) -> dict:
         df = pd.DataFrame(windows)
         agg = {}
+
+        # Per-horizon aggregate statistics
         for h in self.HORIZONS:
             col = f"ret_{h}c"
             if col not in df.columns:
@@ -234,17 +236,7 @@ class EventStudy:
             if len(series) == 0:
                 continue
             minutes = h * self._tf_min
-            agg[f"ret_{minutes}m"] = {
-                "mean": round(float(series.mean()), 4),
-                "median": round(float(series.median()), 4),
-                "std": round(float(series.std()), 4),
-                "t_stat": round(
-                    float(series.mean() / (series.std() / np.sqrt(len(series))))
-                    if series.std() > 0 else 0.0, 4
-                ),
-                "pct_positive": round(float((series > 0).mean() * 100), 2),
-                "n": int(len(series)),
-            }
+            agg[f"ret_{minutes}m"] = self._horizon_stats(series, minutes)
 
         # Volatility expansion stats
         if "vol_expansion_ratio" in df.columns:
@@ -255,20 +247,56 @@ class EventStudy:
                 "pct_above_1": round(float((ve > 1.0).mean() * 100), 2),
             }
 
-        # By domain
+        # By domain — full multi-horizon breakdown per event type
         if "domain" in df.columns:
             agg["by_domain"] = {}
             for domain in df["domain"].unique():
                 sub = df[df["domain"] == domain]
-                col = "ret_1c"
-                if col in sub.columns:
-                    s = sub[col].dropna()
-                    agg["by_domain"][domain] = {
-                        "n": int(len(s)),
-                        "mean_5m_ret": round(float(s.mean()), 4) if len(s) > 0 else 0.0,
-                    }
+                domain_stats: dict = {"n": int(len(sub))}
+                for h in self.HORIZONS:
+                    col = f"ret_{h}c"
+                    if col in sub.columns:
+                        s = sub[col].dropna()
+                        minutes = h * self._tf_min
+                        domain_stats[f"ret_{minutes}m"] = self._horizon_stats(s, minutes)
+                # Volatility change per domain
+                if "vol_expansion_ratio" in sub.columns:
+                    ve = sub["vol_expansion_ratio"].dropna()
+                    if len(ve) > 0:
+                        domain_stats["vol_expansion_mean"] = round(float(ve.mean()), 4)
+                # Time-to-peak impact
+                if "return_path" in sub.columns:
+                    peaks = []
+                    for path in sub["return_path"]:
+                        if path and len(path) > 1:
+                            abs_path = [abs(r) for r in path]
+                            peak_idx = abs_path.index(max(abs_path))
+                            peaks.append(peak_idx * self._tf_min)
+                    if peaks:
+                        domain_stats["time_to_peak_minutes"] = {
+                            "mean": round(float(np.mean(peaks)), 1),
+                            "median": round(float(np.median(peaks)), 1),
+                        }
+                agg["by_domain"][domain] = domain_stats
 
         return agg
+
+    @staticmethod
+    def _horizon_stats(series, minutes: int) -> dict:
+        """Compute standard horizon statistics for a return series."""
+        if len(series) == 0:
+            return {"n": 0}
+        return {
+            "mean": round(float(series.mean()), 4),
+            "median": round(float(series.median()), 4),
+            "std": round(float(series.std()), 4),
+            "t_stat": round(
+                float(series.mean() / (series.std() / np.sqrt(len(series))))
+                if series.std() > 0 else 0.0, 4
+            ),
+            "pct_positive": round(float((series > 0).mean() * 100), 2),
+            "n": int(len(series)),
+        }
 
     # ------------------------------------------------------------------
     # Plotting

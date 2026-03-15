@@ -34,13 +34,16 @@ def print_performance_table(summary: dict, title: str = "Performance Summary") -
         ("Win Rate", f"{summary.get('win_rate_pct', 0):.2f}%"),
         ("Avg Win", f"${summary.get('avg_win_usd', 0):.4f}"),
         ("Avg Loss", f"${summary.get('avg_loss_usd', 0):.4f}"),
+        ("Payoff Ratio", f"{summary.get('payoff_ratio', 0):.4f}"),
         ("Profit Factor", f"{summary.get('profit_factor', 0):.4f}"),
         ("Expectancy", f"${summary.get('expectancy_usd', 0):.4f}"),
         ("Max Drawdown", f"{summary.get('max_drawdown_pct', 0):.4f}%"),
+        ("Recovery Factor", f"{summary.get('recovery_factor', 0):.4f}"),
         ("Sharpe Ratio", f"{summary.get('sharpe_ratio', 0):.4f}"),
         ("Sortino Ratio", f"{summary.get('sortino_ratio', 0):.4f}"),
         ("Calmar Ratio", f"{summary.get('calmar_ratio', 0):.4f}"),
         ("Ann. Return", f"{summary.get('annualised_return_pct', 0):.4f}%"),
+        ("Risk of Ruin", f"{summary.get('risk_of_ruin', 0):.6f}"),
     ]
 
     for metric, val in rows:
