@@ -52,7 +52,8 @@ class TradeEntry:
 class AppState:
     """Central state shared between the trading engine and REST/WS endpoints."""
 
-    def __init__(self, initial_capital: float = 500.0):
+    def __init__(self, initial_capital: float = 500.0, mode: str = "demo"):
+        self.mode: str = mode
         self.initial_capital: float = initial_capital
         self.balance: float = initial_capital
         self.peak_balance: float = initial_capital
@@ -135,6 +136,7 @@ class AppState:
 
     def summary(self) -> dict[str, Any]:
         return {
+            "mode": self.mode,
             "running": self.running,
             "started_at": self.started_at,
             "initial_capital": self.initial_capital,

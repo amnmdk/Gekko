@@ -71,7 +71,8 @@ echo    5) grid           10) health
 echo   11) research-lab
 echo.
 echo    I) install         T) test
-echo    D) dashboard       Q) quit
+echo    D) dashboard        L) live dashboard
+echo    Q) quit
 echo.
 set /p choice="Choice: "
 
@@ -89,6 +90,7 @@ if "%choice%"=="11" (set "CMD=research-lab" & goto :run_command)
 if /i "%choice%"=="i" goto :install
 if /i "%choice%"=="t" goto :test
 if /i "%choice%"=="d" (set "CMD=dashboard" & goto :run_command)
+if /i "%choice%"=="l" (set "CMD=live-dashboard" & goto :run_command)
 if /i "%choice%"=="q" exit /b 0
 echo [ERROR] Invalid choice
 exit /b 1
@@ -165,7 +167,14 @@ if /i "%CMD%"=="simulate" (
 ) else if /i "%CMD%"=="research-lab" (
     ndbot research-lab
 ) else if /i "%CMD%"=="dashboard" (
-    echo Starting web dashboard on http://localhost:8000 ...
+    echo Starting web dashboard [DEMO MODE] on http://localhost:8000 ...
+    set "NDBOT_MODE=demo"
+    start http://localhost:8000
+    %PYTHON% -m uvicorn ndbot.api.app:app --host 0.0.0.0 --port 8000
+) else if /i "%CMD%"=="live-dashboard" (
+    echo Starting web dashboard [LIVE MODE] on http://localhost:8000 ...
+    echo Real RSS news feeds + real exchange prices. Paper trading.
+    set "NDBOT_MODE=live"
     start http://localhost:8000
     %PYTHON% -m uvicorn ndbot.api.app:app --host 0.0.0.0 --port 8000
 ) else if /i "%CMD%"=="validate-config" (

@@ -12,13 +12,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import logging.handlers
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .engine import MockTradingEngine
 from .routes import init_routes, router
 from .state import AppState
 from .ws import init_ws, ws_router
@@ -71,10 +71,19 @@ _setup_logging()
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Shared application state
+# Shared application state — mode from NDBOT_MODE env var (demo | live)
 # ---------------------------------------------------------------------------
-state = AppState(initial_capital=500.0)
-engine = MockTradingEngine(state=state, tick_interval=25.0)
+_MODE = os.environ.get("NDBOT_MODE", "demo").lower()
+state = AppState(initial_capital=500.0, mode=_MODE)
+
+if _MODE == "live":
+    from .engine import LiveTradingEngine
+    engine = LiveTradingEngine(state=state, tick_interval=30.0)
+    logger.info("Engine mode: LIVE (real RSS feeds + exchange prices)")
+else:
+    from .engine import MockTradingEngine
+    engine = MockTradingEngine(state=state, tick_interval=25.0)
+    logger.info("Engine mode: DEMO (synthetic data)")
 
 
 @asynccontextmanager
@@ -90,6 +99,9 @@ async def lifespan(app: FastAPI):
         await task
     except asyncio.CancelledError:
         pass
+    # Clean up async resources (ccxt exchange session, etc.)
+    if hasattr(engine, "cleanup"):
+        await engine.cleanup()
     logger.info("ndbot API stopped")
 
 

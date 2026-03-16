@@ -1,0 +1,83 @@
+# ndbot Live Mode Configuration
+# ================================
+# Uses real RSS news feeds and real exchange prices.
+# Still paper trading (fake money).
+#
+# To use: set NDBOT_MODE=live before starting the dashboard.
+
+run_name: "ndbot-live"
+mode: paper
+
+feeds:
+  # ── Energy / Geopolitics ──
+  - name: "bbc-world"
+    url: "https://feeds.bbci.co.uk/news/world/rss.xml"
+    domain: ENERGY_GEO
+    poll_interval_seconds: 90
+    credibility_weight: 1.7
+    enabled: true
+
+  - name: "aljazeera"
+    url: "https://www.aljazeera.com/xml/rss/all.xml"
+    domain: ENERGY_GEO
+    poll_interval_seconds: 90
+    credibility_weight: 1.5
+    enabled: true
+
+  - name: "reuters-world"
+    url: "https://feeds.reuters.com/reuters/worldNews"
+    domain: ENERGY_GEO
+    poll_interval_seconds: 120
+    credibility_weight: 1.8
+    enabled: true
+
+  - name: "bbc-business"
+    url: "https://feeds.bbci.co.uk/news/business/rss.xml"
+    domain: ENERGY_GEO
+    poll_interval_seconds: 120
+    credibility_weight: 1.4
+    enabled: true
+
+  # ── AI / Tech ──
+  - name: "techcrunch"
+    url: "https://techcrunch.com/feed/"
+    domain: AI_RELEASES
+    poll_interval_seconds: 120
+    credibility_weight: 1.5
+    enabled: true
+
+  - name: "theverge"
+    url: "https://www.theverge.com/rss/index.xml"
+    domain: AI_RELEASES
+    poll_interval_seconds: 120
+    credibility_weight: 1.3
+    enabled: true
+
+  - name: "ars-technica"
+    url: "https://feeds.arstechnica.com/arstechnica/index"
+    domain: AI_RELEASES
+    poll_interval_seconds: 150
+    credibility_weight: 1.4
+    enabled: true
+
+  - name: "hackernews-best"
+    url: "https://hnrss.org/best"
+    domain: AI_RELEASES
+    poll_interval_seconds: 180
+    credibility_weight: 1.2
+    enabled: true
+
+signals:
+  - domain: ENERGY_GEO
+    enabled: true
+    min_confidence: 0.45
+    holding_minutes: 60
+    risk_per_trade: 0.02
+    rr_ratio: 2.0
+
+  - domain: AI_RELEASES
+    enabled: true
+    min_confidence: 0.45
+    holding_minutes: 45
+    risk_per_trade: 0.015
+    rr_ratio: 2.0

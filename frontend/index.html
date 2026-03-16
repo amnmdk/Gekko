@@ -23,6 +23,7 @@
 
   <div id="status-dot" class="status-dot offline"></div>
   <span id="status-label" class="status-label">CONNECTING</span>
+  <span id="mode-badge" class="mode-badge mode-demo">DEMO</span>
 
   <div class="topbar-stat"><span class="label">Balance</span><span class="value" id="tb-balance">&mdash;</span></div>
   <div class="topbar-stat"><span class="label">P&amp;L</span><span class="value" id="tb-pnl">&mdash;</span></div>
@@ -94,17 +95,48 @@
   <div id="ticker-inner"><span style="color:var(--text-muted)">Waiting for events&hellip;</span></div>
 </div>
 
-<!-- BOTTOM PANEL — TRADES -->
+<!-- BOTTOM PANEL — TABBED TRADES -->
 <div id="bottom-panel">
-  <div class="panel-header">
-    <h4>Trades</h4>
-    <span id="open-count-badge">0 OPEN</span>
+  <div class="tab-bar">
+    <button class="tab active" data-tab="active">Active <span class="tab-badge" id="tab-active-count">0</span></button>
+    <button class="tab" data-tab="history">History <span class="tab-badge" id="tab-history-count">0</span></button>
+    <button class="tab" data-tab="pnl">P&amp;L</button>
+    <button class="tab" data-tab="events-log">Events Log</button>
   </div>
-  <div id="trades-container">
-    <table id="trades-table">
+
+  <!-- Active Positions Tab -->
+  <div class="tab-content" id="tab-active">
+    <table id="active-table">
       <thead><tr>
-        <th>Time</th><th>Symbol</th><th>Dir</th><th>Entry</th><th>Exit</th>
-        <th>Size</th><th>P&amp;L</th><th>Status</th><th>Event</th>
+        <th>Opened</th><th>Symbol</th><th>Dir</th><th>Entry</th><th>Current</th>
+        <th>Size</th><th>Unreal. P&amp;L</th><th>P&amp;L %</th><th>Duration</th><th>Event</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <!-- Trade History Tab -->
+  <div class="tab-content hidden" id="tab-history">
+    <table id="history-table">
+      <thead><tr>
+        <th>Opened</th><th>Closed</th><th>Symbol</th><th>Dir</th><th>Entry</th><th>Exit</th>
+        <th>Size</th><th>P&amp;L</th><th>P&amp;L %</th><th>Duration</th><th>Status</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <!-- P&L Summary Tab -->
+  <div class="tab-content hidden" id="tab-pnl">
+    <div id="pnl-summary"></div>
+  </div>
+
+  <!-- Events Log Tab -->
+  <div class="tab-content hidden" id="tab-events-log">
+    <table id="events-log-table">
+      <thead><tr>
+        <th>Time</th><th>Domain</th><th>Direction</th><th>Confidence</th>
+        <th>Sentiment</th><th>Headline</th>
       </tr></thead>
       <tbody></tbody>
     </table>
