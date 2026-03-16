@@ -75,20 +75,20 @@ echo    D) dashboard       Q) quit
 echo.
 set /p choice="Choice: "
 
-if "%choice%"=="1" (set CMD=simulate & goto :run_command)
-if "%choice%"=="2" (set CMD=backtest & goto :run_command)
-if "%choice%"=="3" (set CMD=event-study & goto :run_command)
-if "%choice%"=="4" (set CMD=walkforward & goto :run_command)
-if "%choice%"=="5" (set CMD=grid & goto :run_command)
-if "%choice%"=="6" (set CMD=monte-carlo & goto :run_command)
-if "%choice%"=="7" (set CMD=paper & goto :run_command)
-if "%choice%"=="8" (set CMD=seed-demo & goto :run_command)
-if "%choice%"=="9" (set CMD=status & goto :run_command)
-if "%choice%"=="10" (set CMD=health & goto :run_command)
-if "%choice%"=="11" (set CMD=research-lab & goto :run_command)
+if "%choice%"=="1" (set "CMD=simulate" & goto :run_command)
+if "%choice%"=="2" (set "CMD=backtest" & goto :run_command)
+if "%choice%"=="3" (set "CMD=event-study" & goto :run_command)
+if "%choice%"=="4" (set "CMD=walkforward" & goto :run_command)
+if "%choice%"=="5" (set "CMD=grid" & goto :run_command)
+if "%choice%"=="6" (set "CMD=monte-carlo" & goto :run_command)
+if "%choice%"=="7" (set "CMD=paper" & goto :run_command)
+if "%choice%"=="8" (set "CMD=seed-demo" & goto :run_command)
+if "%choice%"=="9" (set "CMD=status" & goto :run_command)
+if "%choice%"=="10" (set "CMD=health" & goto :run_command)
+if "%choice%"=="11" (set "CMD=research-lab" & goto :run_command)
 if /i "%choice%"=="i" goto :install
 if /i "%choice%"=="t" goto :test
-if /i "%choice%"=="d" (set CMD=dashboard & goto :run_command)
+if /i "%choice%"=="d" (set "CMD=dashboard" & goto :run_command)
 if /i "%choice%"=="q" exit /b 0
 echo [ERROR] Invalid choice
 exit /b 1
