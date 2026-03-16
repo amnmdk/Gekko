@@ -166,7 +166,8 @@ if /i "%CMD%"=="simulate" (
     ndbot research-lab
 ) else if /i "%CMD%"=="dashboard" (
     echo Starting web dashboard on http://localhost:8000 ...
-    %PYTHON% -m uvicorn ndbot.api.app:create_app --host 0.0.0.0 --port 8000 --factory
+    start http://localhost:8000
+    %PYTHON% -m uvicorn ndbot.api.app:app --host 0.0.0.0 --port 8000
 ) else if /i "%CMD%"=="validate-config" (
     ndbot validate-config -c "%NDBOT_CONFIG%"
 ) else if /i "%CMD%"=="export" (
