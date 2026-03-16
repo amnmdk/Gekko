@@ -45,6 +45,7 @@ REM --- Route command ---
 if "%~1"=="" goto :menu
 if /i "%~1"=="install" goto :install
 if /i "%~1"=="test" goto :test
+if /i "%~1"=="research-lab" goto :run_command
 if /i "%~1"=="--help" goto :help
 if /i "%~1"=="-h" goto :help
 goto :run_command
@@ -67,6 +68,7 @@ echo    2) backtest        7) paper
 echo    3) event-study     8) seed-demo
 echo    4) walkforward     9) status
 echo    5) grid           10) health
+echo   11) research-lab
 echo.
 echo    I) install         T) test
 echo    D) dashboard       Q) quit
@@ -83,6 +85,7 @@ if "%choice%"=="7" (set CMD=paper & goto :run_command)
 if "%choice%"=="8" (set CMD=seed-demo & goto :run_command)
 if "%choice%"=="9" (set CMD=status & goto :run_command)
 if "%choice%"=="10" (set CMD=health & goto :run_command)
+if "%choice%"=="11" (set CMD=research-lab & goto :run_command)
 if /i "%choice%"=="i" goto :install
 if /i "%choice%"=="t" goto :test
 if /i "%choice%"=="d" (set CMD=dashboard & goto :run_command)
@@ -159,6 +162,8 @@ if /i "%CMD%"=="simulate" (
     ndbot status
 ) else if /i "%CMD%"=="health" (
     ndbot health
+) else if /i "%CMD%"=="research-lab" (
+    ndbot research-lab
 ) else if /i "%CMD%"=="dashboard" (
     echo Starting web dashboard on http://localhost:8000 ...
     %PYTHON% -m uvicorn ndbot.api.app:create_app --host 0.0.0.0 --port 8000 --factory
@@ -170,6 +175,7 @@ if /i "%CMD%"=="simulate" (
     echo [ERROR] Unknown command: %CMD%
     goto :help
 )
+if errorlevel 1 goto :pause_and_exit
 goto :done
 
 :help
@@ -185,6 +191,7 @@ echo   paper           Paper trading (sandbox/testnet)
 echo   seed-demo       Quick demo (no config needed)
 echo   status          Show recent runs
 echo   health          System health check
+echo   research-lab    Full quant research lab demo
 echo   dashboard       Start web dashboard
 echo   validate-config Validate config file
 echo   export          Export data to CSV/JSON
@@ -204,4 +211,4 @@ exit /b 1
 
 :done
 echo.
-if "%INTERACTIVE%"=="1" pause
+pause
